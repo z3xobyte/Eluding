@@ -1,0 +1,69 @@
+{
+  "width": 60,
+  "height": 7,
+  "tileSize": 80,
+  "enemyConfig": {
+    "spawnTileType": 1,
+    "types": {
+      "basic": {
+        "count": 25,
+        "radius": 10,
+        "minSpeed": 10,
+        "maxSpeed": 15
+      },
+      "sniper": {
+        "count": 3,
+        "radius": 1,
+        "minSpeed": 5,
+        "maxSpeed": 8,
+        "detectionRange": 500,
+        "shootingRange": 400,
+        "maxShootCooldown": 100,
+        "bulletRadius": 50,
+        "bulletSpeed": 5
+      }
+    }
+  },
+  "teleporterCodes": [
+    {
+      "code": "area1_area2",
+      "mapId": "area1"
+    }
+  ],
+  "encodedMap": [
+    0,
+    61,
+    2,
+    3,
+    1,
+    54,
+    0,
+    3,
+    2,
+    3,
+    1,
+    54,
+    0,
+    3,
+    2,
+    3,
+    1,
+    54,
+    3,
+    1,
+    0,
+    2,
+    2,
+    3,
+    1,
+    54,
+    0,
+    3,
+    2,
+    3,
+    1,
+    54,
+    0,
+    62
+  ]
+}

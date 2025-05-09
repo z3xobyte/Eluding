@@ -40,6 +40,14 @@ function broadcast(message, excludeWs = null) {
 
 function parseMessage(message) {
   if (Buffer.isBuffer(message)) {
+    if (message.length === 9 && message[0] === 1) {
+      return {
+        type: 'm',
+        x: message.readInt32LE(1),
+        y: message.readInt32LE(5)
+      };
+    }
+    
     try {
       const decompressed = zlib.gunzipSync(message);
       return JSON.parse(decompressed.toString());

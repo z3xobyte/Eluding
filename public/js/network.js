@@ -202,11 +202,15 @@ export class Network {
     const distance = Math.sqrt(dx * dx + dy * dy);
     
     if (distance > 1 || now - this.lastMovementTime > this.movementThrottle) {
-      this.send({
-        type: 'm',
-        x: Math.round(x),
-        y: Math.round(y)
-      });
+      const buffer = new ArrayBuffer(9);
+      const view = new DataView(buffer);
+      
+      view.setUint8(0, 1);
+      
+      view.setInt32(1, Math.round(x), true);
+      view.setInt32(5, Math.round(y), true);
+      
+      this.socket.send(buffer);
       
       this.lastSentMousePos.x = x;
       this.lastSentMousePos.y = y;
