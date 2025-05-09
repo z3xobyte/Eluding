@@ -119,6 +119,17 @@
             background-color: #166088;
         }
         
+        .draw-options {
+            display: flex;
+            align-items: center;
+            margin-left: 15px;
+            color: var(--light-color);
+        }
+        
+        .draw-options input[type="checkbox"] {
+            margin-right: 5px;
+        }
+        
         .spacer {
             flex: 1;
         }
@@ -241,6 +252,12 @@
             <div class="tile tile-safe" data-tile-type="2">S</div>
             <div class="tile tile-teleporter" data-tile-type="3">T</div>
         </div>
+        <div class="draw-options">
+            <label for="symmetricDrawing">
+                <input type="checkbox" id="symmetricDrawing">
+                Symmetric Drawing
+            </label>
+        </div>
         <div class="spacer"></div>
         <button id="exportMapBtn">Export</button>
         <button id="importMapBtn">Import</button>
@@ -292,11 +309,60 @@
             height: 12,
             tileSize: 80,
             enemyConfig: {
-                count: 1,
-                radius: 15,
-                minSpeed: 5,
-                maxSpeed: 8,
-                spawnTileType: 1
+                spawnTileType: 1,
+                types: {
+                    basic: {
+                        count: 10,
+                        radius: 15,
+                        minSpeed: 5,
+                        maxSpeed: 8
+                    },
+                    sniper: {
+                        count: 0,
+                        radius: 15,
+                        minSpeed: 3,
+                        maxSpeed: 5,
+                        detectionRange: 500,
+                        shootingRange: 400,
+                        maxShootCooldown: 100,
+                        bulletRadius: 5,
+                        bulletSpeed: 5
+                    },
+                    dasher: {
+                        count: 0,
+                        radius: 15,
+                        minSpeed: 5,
+                        maxSpeed: 8,
+                        timeToPrepare: 750,
+                        timeToDash: 3000,
+                        timeBetweenDashes: 750
+                    },
+                    homing: {
+                        count: 0,
+                        radius: 15,
+                        minSpeed: 4,
+                        maxSpeed: 6,
+                        turnIncrement: 0.05,
+                        homeRange: 200
+                    },
+                    void_crawler: {
+                        count: 0,
+                        radius: 15,
+                        minSpeed: 4,
+                        maxSpeed: 6,
+                        turnIncrement: 0.05,
+                        homeRange: 200
+                    },
+                    wall: {
+                        count: 0,
+                        radius: 15,
+                        minSpeed: 3,
+                        maxSpeed: 5,
+                        moveClockwise: true,
+                        patternAlternate: false,
+                        initialSide: 0
+                    }
+                }
             },
             teleporterCodes: [],
             encodedMap: []
@@ -308,6 +374,7 @@
         let selectedTileType = 0;
         let currentTeleporterIndex = -1;
         let isDrawing = false;
+        let symmetricDrawing = false;
         const gui = new dat.GUI({ autoPlace: true, width: 350 });
         gui.domElement.style.position = 'absolute';
         gui.domElement.style.top = '50px';
@@ -327,50 +394,91 @@
         mapSettingsFolder.add(mapSettings, 'tileSize', 20, 200, 5).name('Tile Size (px)');
         mapSettingsFolder.add(mapSettings, 'updateMap').name('Update Map');
         mapSettingsFolder.open();
-        const enemyFolder = gui.addFolder('Enemy Configuration');
         
-        enemyFolder.add(mapData.enemyConfig, 'count', 1, 20, 1).name('Count');
-        enemyFolder.add(mapData.enemyConfig, 'radius', 5, 30, 1).name('Radius');
-        enemyFolder.add(mapData.enemyConfig, 'minSpeed', 1, 20, 1).name('Min Speed');
-        enemyFolder.add(mapData.enemyConfig, 'maxSpeed', 1, 20, 1).name('Max Speed');
+        // Enemy Configuration
+        const enemyFolder = gui.addFolder('Enemy Spawner');
         
+        // Common enemy spawn settings
         const spawnTypeController = enemyFolder.add(mapData.enemyConfig, 'spawnTileType', { 'Floor': 1, 'Safe Zone': 2 }).name('Spawn Tile Type');
         spawnTypeController.onChange(value => {
             mapData.enemyConfig.spawnTileType = parseInt(value);
         });
         
-        enemyFolder.open();
-        const teleporterFolder = gui.addFolder('Teleporter Codes');
-        
-        const teleporterControls = {
-            addTeleporter: () => {
-                editTeleporter(-1);
-            },
-            teleporters: {} // Will be populated dynamically
+        // Enemy type selector
+        const enemyTypeConfig = {
+            selectedType: 'basic',
+            types: Object.keys(mapData.enemyConfig.types)
         };
         
-        teleporterFolder.add(teleporterControls, 'addTeleporter').name('Add Teleporter Code');
+        // Create the type dropdown
+        const enemyTypeController = enemyFolder.add(enemyTypeConfig, 'selectedType', enemyTypeConfig.types).name('Enemy Type');
         
-        function updateTeleporterGUI() {
-            for (const key in teleporterControls.teleporters) {
-                if (teleporterFolder.__controllers) {
-                    const controller = teleporterFolder.__controllers.find(c => c.property === key);
-                    if (controller) {
-                        controller.remove();
-                    }
-                }
-                delete teleporterControls.teleporters[key];
+        // Dynamic config panel that changes based on selected type
+        const configFolder = enemyFolder.addFolder('Configuration');
+        let currentControllers = [];
+        
+        // Function to update the configuration panel based on selected enemy type
+        function updateConfigPanel() {
+            // Remove existing controllers
+            currentControllers.forEach(controller => controller.remove());
+            currentControllers = [];
+            
+            const selectedType = enemyTypeConfig.selectedType;
+            const typeConfig = mapData.enemyConfig.types[selectedType];
+            
+            // Add common controllers
+            currentControllers.push(configFolder.add(typeConfig, 'count', 0, 50, 1).name('Count'));
+            currentControllers.push(configFolder.add(typeConfig, 'radius', 5, 30, 1).name('Radius'));
+            currentControllers.push(configFolder.add(typeConfig, 'minSpeed', 1, 20, 1).name('Min Speed'));
+            currentControllers.push(configFolder.add(typeConfig, 'maxSpeed', 1, 20, 1).name('Max Speed'));
+            
+            // Add type-specific controllers
+            switch(selectedType) {
+                case 'sniper':
+                    currentControllers.push(configFolder.add(typeConfig, 'detectionRange', 100, 1000, 50).name('Detection Range'));
+                    currentControllers.push(configFolder.add(typeConfig, 'shootingRange', 100, 1000, 50).name('Shooting Range'));
+                    currentControllers.push(configFolder.add(typeConfig, 'maxShootCooldown', 10, 500, 10).name('Shoot Cooldown'));
+                    currentControllers.push(configFolder.add(typeConfig, 'bulletRadius', 2, 20, 1).name('Bullet Radius'));
+                    currentControllers.push(configFolder.add(typeConfig, 'bulletSpeed', 1, 20, 1).name('Bullet Speed'));
+                    break;
+                    
+                case 'dasher':
+                    currentControllers.push(configFolder.add(typeConfig, 'timeToPrepare', 100, 2000, 50).name('Time To Prepare (ms)'));
+                    currentControllers.push(configFolder.add(typeConfig, 'timeToDash', 500, 5000, 100).name('Time To Dash (ms)'));
+                    currentControllers.push(configFolder.add(typeConfig, 'timeBetweenDashes', 100, 2000, 50).name('Time Between Dashes (ms)'));
+                    break;
+                    
+                case 'homing':
+                case 'void_crawler':
+                    currentControllers.push(configFolder.add(typeConfig, 'turnIncrement', 0.01, 0.2, 0.01).name('Turn Increment'));
+                    currentControllers.push(configFolder.add(typeConfig, 'homeRange', 50, 500, 10).name('Home Range'));
+                    break;
+                    
+                case 'wall':
+                    currentControllers.push(configFolder.add(typeConfig, 'moveClockwise').name('Move Clockwise'));
+                    currentControllers.push(configFolder.add(typeConfig, 'patternAlternate').name('Alternate Pattern'));
+                    currentControllers.push(configFolder.add(typeConfig, 'initialSide', { 'Top': 0, 'Right': 1, 'Bottom': 2, 'Left': 3 }).name('Initial Side'));
+                    break;
             }
-            mapData.teleporterCodes.forEach((teleporter, index) => {
-                const controlKey = `teleporter${index}`;
-                teleporterControls.teleporters[controlKey] = () => {
-                    editTeleporter(index);
-                };
-                teleporterFolder.add(teleporterControls.teleporters, controlKey).name(`${teleporter.code} → ${teleporter.mapId}`);
-            });
         }
         
-        teleporterFolder.open();
+        // Set up the onChange event for the type dropdown
+        enemyTypeController.onChange(updateConfigPanel);
+        
+        // Initialize with the default selected type
+        updateConfigPanel();
+        
+        enemyFolder.open();
+        configFolder.open();
+        
+        function updateEnemyGuiControllers() {
+            // Update the type dropdown display
+            enemyTypeController.updateDisplay();
+            
+            // Re-create the configuration panel
+            updateConfigPanel();
+        }
+        
         function initMap() {
             mapData.width = mapSettings.width;
             mapData.height = mapSettings.height;
@@ -467,6 +575,30 @@
         function setTileAt(tileX, tileY) {
             if (tileX >= 0 && tileX < mapData.width && tileY >= 0 && tileY < mapData.height) {
                 tiles[tileY][tileX] = selectedTileType;
+                
+                // Apply symmetric drawing if enabled
+                if (symmetricDrawing) {
+                    // Calculate the center points for symmetry
+                    const centerX = Math.floor(mapData.width / 2);
+                    const centerY = Math.floor(mapData.height / 2);
+                    
+                    // Mirror positions
+                    const mirrorX = mapData.width - 1 - tileX;
+                    const mirrorY = mapData.height - 1 - tileY;
+                    
+                    // Set mirrored tiles
+                    if (mirrorX >= 0 && mirrorX < mapData.width && mirrorY >= 0 && mirrorY < mapData.height) {
+                        // Mirror across X axis (vertical symmetry)
+                        tiles[tileY][mirrorX] = selectedTileType;
+                        
+                        // Mirror across Y axis (horizontal symmetry)
+                        tiles[mirrorY][tileX] = selectedTileType;
+                        
+                        // Mirror across both axes (diagonal symmetry)
+                        tiles[mirrorY][mirrorX] = selectedTileType;
+                    }
+                }
+                
                 drawMap();
                 return true;
             }
@@ -534,26 +666,120 @@
         function importMap(jsonData) {
             try {
                 const data = JSON.parse(jsonData);
+                
+                // Handle mapData structure updates
+                if (!data.enemyConfig.types) {
+                    // Convert old format to new format
+                    data.enemyConfig = {
+                        spawnTileType: data.enemyConfig.spawnTileType || 1,
+                        types: {
+                            basic: {
+                                count: data.enemyConfig.count || 10,
+                                radius: data.enemyConfig.radius || 15,
+                                minSpeed: data.enemyConfig.minSpeed || 5,
+                                maxSpeed: data.enemyConfig.maxSpeed || 8
+                            },
+                            sniper: {
+                                count: 0,
+                                radius: 15,
+                                minSpeed: 3,
+                                maxSpeed: 5,
+                                detectionRange: 500,
+                                shootingRange: 400,
+                                maxShootCooldown: 100,
+                                bulletRadius: 5,
+                                bulletSpeed: 5
+                            },
+                            dasher: {
+                                count: 0,
+                                radius: 15,
+                                minSpeed: 5,
+                                maxSpeed: 8,
+                                timeToPrepare: 750,
+                                timeToDash: 3000,
+                                timeBetweenDashes: 750
+                            },
+                            homing: {
+                                count: 0,
+                                radius: 15,
+                                minSpeed: 4,
+                                maxSpeed: 6,
+                                turnIncrement: 0.05,
+                                homeRange: 200
+                            },
+                            void_crawler: {
+                                count: 0,
+                                radius: 15,
+                                minSpeed: 4,
+                                maxSpeed: 6,
+                                turnIncrement: 0.05,
+                                homeRange: 200
+                            },
+                            wall: {
+                                count: 0,
+                                radius: 15,
+                                minSpeed: 3,
+                                maxSpeed: 5,
+                                moveClockwise: true,
+                                patternAlternate: false,
+                                initialSide: 0
+                            }
+                        }
+                    };
+                }
+                
+                // Ensure all enemy types exist
+                const requiredTypes = ['basic', 'sniper', 'dasher', 'homing', 'void_crawler', 'wall'];
+                requiredTypes.forEach(type => {
+                    if (!data.enemyConfig.types[type]) {
+                        data.enemyConfig.types[type] = mapData.enemyConfig.types[type];
+                    }
+                });
+                
                 mapData = data;
                 mapSettings.width = mapData.width;
                 mapSettings.height = mapData.height;
                 mapSettings.tileSize = mapData.tileSize;
+                
+                // Update all GUI controllers
                 for (let i = 0; i < mapSettingsFolder.__controllers.length; i++) {
                     mapSettingsFolder.__controllers[i].updateDisplay();
                 }
-                for (let i = 0; i < enemyFolder.__controllers.length; i++) {
-                    enemyFolder.__controllers[i].updateDisplay();
-                }
-                tiles = decodeMap(mapData.encodedMap);
+                
+                // Update enemy type UI
+                updateEnemyGuiControllers();
+                
                 updateTeleporterGUI();
+                tiles = decodeMap(mapData.encodedMap);
                 resizeCanvas();
                 
                 return true;
             } catch (error) {
                 alert('Error importing map: ' + error.message);
+                console.error(error);
                 return false;
             }
         }
+        
+        function updateTeleporterGUI() {
+            for (const key in teleporterControls.teleporters) {
+                if (teleporterFolder.__controllers) {
+                    const controller = teleporterFolder.__controllers.find(c => c.property === key);
+                    if (controller) {
+                        controller.remove();
+                    }
+                }
+                delete teleporterControls.teleporters[key];
+            }
+            mapData.teleporterCodes.forEach((teleporter, index) => {
+                const controlKey = `teleporter${index}`;
+                teleporterControls.teleporters[controlKey] = () => {
+                    editTeleporter(index);
+                };
+                teleporterFolder.add(teleporterControls.teleporters, controlKey).name(`${teleporter.code} → ${teleporter.mapId}`);
+            });
+        }
+        
         function editTeleporter(index) {
             currentTeleporterIndex = index;
             
@@ -597,6 +823,12 @@
                     selectedTileType = parseInt(e.target.dataset.tileType);
                 });
             });
+            
+            // Symmetric drawing checkbox event
+            document.getElementById('symmetricDrawing').addEventListener('change', (e) => {
+                symmetricDrawing = e.target.checked;
+            });
+            
             canvas.addEventListener('mousedown', e => {
                 isDrawing = true;
                 const rect = canvas.getBoundingClientRect();

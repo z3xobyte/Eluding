@@ -12,18 +12,18 @@
         "maxSpeed": 15
       },
       "sniper": {
-        "count": 0,
+        "count": 10,
         "radius": 1,
         "minSpeed": 5,
         "maxSpeed": 8,
         "detectionRange": 500,
         "shootingRange": 400,
         "maxShootCooldown": 100,
-        "bulletRadius": 50,
+        "bulletRadius": 5,
         "bulletSpeed": 5
       },
       "dasher": {
-        "count": 0,
+        "count": 20,
         "radius": 15,
         "minSpeed": 12,
         "maxSpeed": 18,

@@ -6,13 +6,13 @@
     "spawnTileType": 1,
     "types": {
       "basic": {
-        "count": 0,
+        "count": 5,
         "radius": 1,
         "minSpeed": 5,
         "maxSpeed": 7
       },
       "sniper": {
-        "count": 0,
+        "count": 5,
         "radius": 15,
         "minSpeed": 4,
         "maxSpeed": 6,
@@ -23,7 +23,7 @@
         "bulletSpeed": 15
       },
       "wall": {
-        "count": 50,
+        "count": 30,
         "radius": 14,
         "minSpeed": 8,
         "maxSpeed": 8,
