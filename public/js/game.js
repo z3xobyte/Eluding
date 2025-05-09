@@ -469,7 +469,8 @@ class Game {
     this.render();
     this.gameLoopRequestId = requestAnimationFrame(() => this.gameLoop());
   }
-  
+
+
   startGameLoop() {
     this.gameLoop();
   }

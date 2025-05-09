@@ -25,10 +25,10 @@ class Player {
     this.d_y = 0;
     this.slippery = false;
     this.collisionCache = new Map();
-    this.cacheTimeout = 100;
-    this.lastCacheCleanup = Date.now();
+    this.MAX_COLLISION_CACHE_SIZE = 1000;
+    this.COLLISION_CACHE_EVICTION_COUNT = 100;
     this.stuckCounter = 0;
-    this.lastPosition = { x, y };
+    this.lastPosition = { x: x, y: y };
     this.isDead = false;
     this.currentMapId = null;
     this.lastTeleporterIdUsed = null;
@@ -74,33 +74,29 @@ class Player {
   update(map, gameInstance) {
     const grid = gameInstance.mapGrids.get(this.currentMapId);
     if (!grid) return;
+
     if (this.teleporterCooldown > 0) {
       this.teleporterCooldown--;
     }
     const wasOnTeleporter = this.isOnTeleporter;
-    const wasFullyOutsideTeleporter = this.wasFullyOutsideTeleporter;
     
     const currentTime = Date.now();
-    const deltaTime = (currentTime - this.lastUpdateTime) / 16.67;
+    const actualDeltaTimeMs = currentTime - this.lastUpdateTime;
+    const deltaTimeFactor = actualDeltaTimeMs / 16.67; 
     this.lastUpdateTime = currentTime;
 
-    const movedDistance = Math.sqrt(
-      Math.pow(this.x - this.lastPosition.x, 2) + 
-      Math.pow(this.y - this.lastPosition.y, 2)
-    );
+    const dxMoved = this.x - this.lastPosition.x;
+    const dyMoved = this.y - this.lastPosition.y;
+    const movedDistanceSq = dxMoved * dxMoved + dyMoved * dyMoved;
     
-    if (movedDistance < 0.1 && (Math.abs(this.vx) > 0.1 || Math.abs(this.vy) > 0.1)) {
+    if (movedDistanceSq < (0.1 * 0.1) && (Math.abs(this.vx) > 0.1 || Math.abs(this.vy) > 0.1)) {
       this.stuckCounter++;
     } else {
       this.stuckCounter = 0;
     }
 
-    this.lastPosition = { x: this.x, y: this.y };
-
-    if (currentTime - this.lastCacheCleanup > 1000) {
-      this.collisionCache.clear();
-      this.lastCacheCleanup = currentTime;
-    }
+    this.lastPosition.x = this.x;
+    this.lastPosition.y = this.y;
 
     if (this.isDead) {
       this.vx = 0;
@@ -108,20 +104,24 @@ class Player {
       return;
     }
 
+    let currentVx = 0;
+    let currentVy = 0;
+
     if (this.input) {
-      this.vx = this.d_x * this.maxSpeed;
-      this.vy = this.d_y * this.maxSpeed;
+      currentVx = this.d_x * this.maxSpeed;
+      currentVy = this.d_y * this.maxSpeed;
     } else {
       const dx = this.targetX - this.x;
       const dy = this.targetY - this.y;
-      const distance = Math.sqrt(dx * dx + dy * dy);
-      if (distance > 1) {
+      const distanceSq = dx * dx + dy * dy;
+      if (distanceSq > 1) {
+        const distance = Math.sqrt(distanceSq);
         const speedFactor = Math.min(distance / 150, 1);
         
         const dirX = dx / distance;
         const dirY = dy / distance;
-        this.vx = dirX * this.maxSpeed * speedFactor;
-        this.vy = dirY * this.maxSpeed * speedFactor;
+        currentVx = dirX * this.maxSpeed * speedFactor;
+        currentVy = dirY * this.maxSpeed * speedFactor;
       } else {
         this.x = this.targetX;
         this.y = this.targetY;
@@ -131,13 +131,14 @@ class Player {
       }
     }
     
+    this.vx = currentVx;
+    this.vy = currentVy;
+    
     if (this.stuckCounter > 3) {
       const pushDistance = 0.5;
       const pushDirections = [
-        { x: pushDistance, y: 0 },
-        { x: -pushDistance, y: 0 },
-        { x: 0, y: pushDistance },
-        { x: 0, y: -pushDistance }
+        { x: pushDistance, y: 0 }, { x: -pushDistance, y: 0 },
+        { x: 0, y: pushDistance }, { x: 0, y: -pushDistance }
       ];
       
       for (const dir of pushDirections) {
@@ -150,94 +151,114 @@ class Player {
       }
     }
     
-    const newX = this.x + this.vx;
-    const newY = this.y + this.vy;
+    const intendedNewX = this.x + this.vx * deltaTimeFactor;
+    const intendedNewY = this.y + this.vy * deltaTimeFactor;
     
-    const canMoveX = !this.collidesWithWall(newX, this.y, map);
-    const canMoveY = !this.collidesWithWall(this.x, newY, map);
+    const canMoveX = !this.collidesWithWall(intendedNewX, this.y, map);
+    const canMoveY = !this.collidesWithWall(this.x, intendedNewY, map);
 
-    if (canMoveX) this.x = newX;
-    if (canMoveY) this.y = newY;
+    if (canMoveX) this.x = intendedNewX;
+    if (canMoveY) this.y = intendedNewY;
 
-    if (!canMoveX && !canMoveY) {
-      this.handleSliding(map);
+    if (!canMoveX && !canMoveY && (this.vx !== 0 || this.vy !== 0)) {
+       this.handleSliding(map, deltaTimeFactor);
     }
+
 
     if (this.input && (!canMoveX || !canMoveY)) {
       this.input.setSlippery(false);
     }
+
     this.isOnTeleporter = grid.checkTeleporterCollision(this);
     this.isFullyInsideTeleporter = this.isOnTeleporter && grid.isFullyInsideTeleporter(this);
-    this.wasFullyOutsideTeleporter = grid.isFullyOutsideTeleporter(this);
-    if (this.isOnTeleporter || wasOnTeleporter) {
-      // console.log('gg');
+    
+    if (this.wasFullyOutsideTeleporter && !this.isFullyInsideTeleporter && this.isOnTeleporter) {
+        
+    } else if (!this.isOnTeleporter) {
+        this.wasFullyOutsideTeleporter = true;
     }
+
+
     if (this.wasFullyOutsideTeleporter) {
-      if (!this.canTeleport) {
+      if (!this.canTeleport && !this.isOnTeleporter) {
         this.canTeleport = true;
       }
     }
+
     if (this.isFullyInsideTeleporter && this.teleporterCooldown === 0 && this.canTeleport) {
       const teleporter = grid.getTeleporterAt(this.x, this.y);
       
       if (teleporter && teleporter.code) {
-
         if (gameInstance && typeof gameInstance.handlePlayerTeleport === 'function') {
           gameInstance.handlePlayerTeleport(this.id, teleporter);
           this.lastTeleporterCodeUsed = teleporter.code;
-          this.teleporterCooldown = 60;
+          this.teleporterCooldown = 60; 
           this.canTeleport = false;
+          this.wasFullyOutsideTeleporter = false; 
         }
       }
     }
   }
   
-  handleSliding(map) {
+  handleSliding(map, deltaTimeFactor) {
+    let currentSlideX = this.x;
+    let currentSlideY = this.y;
+
     for (let i = 0.9; i >= 0.1; i -= 0.1) {
-      const slideX = this.x + this.vx * i;
-      if (!this.collidesWithWall(slideX, this.y, map)) {
-        this.x = slideX;
+      const slideXAttempt = this.x + this.vx * deltaTimeFactor * i;
+      if (!this.collidesWithWall(slideXAttempt, this.y, map)) {
+        currentSlideX = slideXAttempt;
         break;
       }
     }
+    this.x = currentSlideX; 
     
     for (let i = 0.9; i >= 0.1; i -= 0.1) {
-      const slideY = this.y + this.vy * i;
-      if (!this.collidesWithWall(this.x, slideY, map)) {
-        this.y = slideY;
+      const slideYAttempt = this.y + this.vy * deltaTimeFactor * i;
+      if (!this.collidesWithWall(this.x, slideYAttempt, map)) {
+        currentSlideY = slideYAttempt;
         break;
       }
     }
-    
-    if (Math.abs(this.vx) > 0.1 && Math.abs(this.vy) > 0.1) {
-      for (let i = 0.9; i >= 0.1; i -= 0.1) {
-        const slideX = this.x + this.vx * i;
-        const slideY = this.y + this.vy * i;
-        if (!this.collidesWithWall(slideX, slideY, map)) {
-          this.x = slideX;
-          this.y = slideY;
-          break;
+    this.y = currentSlideY;
+
+    if (this.x === this.lastPosition.x && this.y === this.lastPosition.y) {
+       if (Math.abs(this.vx) > 0.01 && Math.abs(this.vy) > 0.01) {
+            for (let i = 0.9; i >= 0.1; i -= 0.1) {
+                const slideX = this.x + this.vx * deltaTimeFactor * i;
+                const slideY = this.y + this.vy * deltaTimeFactor * i;
+                if (!this.collidesWithWall(slideX, slideY, map)) {
+                    this.x = slideX;
+                    this.y = slideY;
+                    break;
+                }
+            }
         }
-      }
     }
   }
   
   collidesWithWall(x, y, map) {
-    const cacheKey = `${Math.floor(x * 10) / 10},${Math.floor(y * 10) / 10}`;
+    const cacheKey = `${Math.round(x * 100)}:${Math.round(y * 100)}`;
     if (this.collisionCache.has(cacheKey)) {
       return this.collisionCache.get(cacheKey);
     }
     
     const result = this.spatialCheckCollision(x, y, map);
     
-    if (this.collisionCache.size > 1000) {
-      const iterator = this.collisionCache.keys();
-      for (let i = 0; i < 200; i++) {
-        this.collisionCache.delete(iterator.next().value);
+    this.collisionCache.set(cacheKey, result);
+    
+    if (this.collisionCache.size > this.MAX_COLLISION_CACHE_SIZE) {
+      const keys = this.collisionCache.keys();
+      for (let i = 0; i < this.COLLISION_CACHE_EVICTION_COUNT; i++) {
+        const keyToDelete = keys.next().value;
+        if (keyToDelete) {
+            this.collisionCache.delete(keyToDelete);
+        } else {
+            break; 
+        }
       }
     }
     
-    this.collisionCache.set(cacheKey, result);
     return result;
   }
   
@@ -249,9 +270,9 @@ class Player {
     const playerTop = y - this.radius;
     const playerBottom = y + this.radius;
     
-    if (playerRight < 0 || playerLeft >= map.width * tileSize || 
-        playerBottom < 0 || playerTop >= map.height * tileSize) {
-      return false;
+    if (playerRight <= 0 || playerLeft >= map.width * tileSize || 
+        playerBottom <= 0 || playerTop >= map.height * tileSize) {
+      return false; 
     }
     
     const leftTile = Math.floor(playerLeft / tileSize);
@@ -259,12 +280,13 @@ class Player {
     const topTile = Math.floor(playerTop / tileSize);
     const bottomTile = Math.floor(playerBottom / tileSize);
     
-    if (leftTile < 0 || rightTile >= map.width || topTile < 0 || bottomTile >= map.height) {
-      return true;
-    }
-    
-    for (let tx = Math.max(0, leftTile); tx <= Math.min(rightTile, map.width - 1); tx++) {
-      for (let ty = Math.max(0, topTile); ty <= Math.min(bottomTile, map.height - 1); ty++) {
+    const clampedLeftTile = Math.max(0, leftTile);
+    const clampedRightTile = Math.min(rightTile, map.width - 1);
+    const clampedTopTile = Math.max(0, topTile);
+    const clampedBottomTile = Math.min(bottomTile, map.height - 1);
+
+    for (let tx = clampedLeftTile; tx <= clampedRightTile; tx++) {
+      for (let ty = clampedTopTile; ty <= clampedBottomTile; ty++) {
         if (map.isWall(tx, ty)) {
           return true;
         }
@@ -273,36 +295,7 @@ class Player {
     
     return false;
   }
-  
-  checkTilesInRange(left, right, top, bottom, map) {
-    if (right < 0 || left >= map.width || bottom < 0 || top >= map.height) {
-      return false;
-    }
     
-    if (left < 0 || right >= map.width || top < 0 || bottom >= map.height) {
-      return true;
-    }
-    
-    const startX = Math.max(0, left);
-    const endX = Math.min(right, map.width - 1);
-    const startY = Math.max(0, top);
-    const endY = Math.min(bottom, map.height - 1);
-    
-    if (startX > endX || startY > endY) {
-      return false;
-    }
-    
-    for (let tx = startX; tx <= endX; tx++) {
-      for (let ty = startY; ty <= endY; ty++) {
-        if (map.isWall(tx, ty)) {
-          return true;
-        }
-      }
-    }
-    
-    return false;
-  }
-  
   setTarget(x, y) {
     this.targetX = x;
     this.targetY = y;
@@ -364,4 +357,4 @@ class Player {
   }
 }
 
-module.exports = { Player }; 
+module.exports = { Player };
