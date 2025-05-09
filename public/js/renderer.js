@@ -9,6 +9,77 @@ export class Renderer {
     this.dirtyCache = true;
     this.arrowSize = 20;
     this.gridSubdivisions = 2;
+
+    this.enableHardwareAcceleration(this.ctx);
+    this.enableHardwareAcceleration(this.offscreenCtx);
+
+    this.spatialGrid = new Map();
+    this.cellSize = 256;
+  }
+  
+  enableHardwareAcceleration(context) {
+    context.imageSmoothingEnabled = false;
+
+    if (context === this.ctx) {
+      context.canvas.style.transform = "translateZ(0)";
+      context.canvas.style.backfaceVisibility = "hidden";
+    }
+  }
+
+  updateSpatialGrid(entities, entityType) {
+    for (const cell of this.spatialGrid.values()) {
+      if (cell[entityType]) {
+        cell[entityType] = [];
+      }
+    }
+    
+    if (!entities || entities.size === 0) return;
+
+    for (const [id, entity] of entities) {
+      if (!entity) continue;
+
+      const cellX = Math.floor(entity.x / this.cellSize);
+      const cellY = Math.floor(entity.y / this.cellSize);
+      const cellKey = `${cellX},${cellY}`;
+
+      if (!this.spatialGrid.has(cellKey)) {
+        this.spatialGrid.set(cellKey, {
+          players: [],
+          enemies: [],
+          bullets: []
+        });
+      }
+
+      const cell = this.spatialGrid.get(cellKey);
+      if (!cell[entityType]) {
+        cell[entityType] = [];
+      }
+      cell[entityType].push({id, entity});
+    }
+  }
+
+  getVisibleEntities(entityType, camera) {
+    const visibleEntities = new Map();
+
+    const startCellX = Math.floor((camera.x - camera.width/2) / this.cellSize);
+    const endCellX = Math.floor((camera.x + camera.width*1.5) / this.cellSize);
+    const startCellY = Math.floor((camera.y - camera.height/2) / this.cellSize);
+    const endCellY = Math.floor((camera.y + camera.height*1.5) / this.cellSize);
+
+    for (let cellX = startCellX; cellX <= endCellX; cellX++) {
+      for (let cellY = startCellY; cellY <= endCellY; cellY++) {
+        const cellKey = `${cellX},${cellY}`;
+        const cell = this.spatialGrid.get(cellKey);
+        
+        if (cell && cell[entityType]) {
+          for (const {id, entity} of cell[entityType]) {
+            visibleEntities.set(id, entity);
+          }
+        }
+      }
+    }
+    
+    return visibleEntities;
   }
 
   renderMap(map, mapWidth, mapHeight, tileSize, camera) {
@@ -41,6 +112,7 @@ export class Renderer {
 
       this.dirtyCache = false;
     }
+
     this.ctx.clearRect(0, 0, this.ctx.canvas.width, this.ctx.canvas.height);
     this.ctx.drawImage(this.offscreenCanvas, 0, 0);
   }
@@ -110,20 +182,18 @@ export class Renderer {
   renderPlayers(players, camera) {
     if (!players || players.size === 0) return;
 
+    this.updateSpatialGrid(players, 'players');
+
+    const visiblePlayers = this.getVisibleEntities('players', camera);
+    if (visiblePlayers.size === 0) return;
+
     const colorGroups = new Map();
     const currentPlayer = this.getCurrentPlayer(players);
 
-    for (const [, player] of players) {
+    for (const [, player] of visiblePlayers) {
       if (!player) continue;
 
       const screenPos = camera.worldToScreen(player.x, player.y);
-
-      if (screenPos.x < -player.radius ||
-          screenPos.y < -player.radius ||
-          screenPos.x > this.ctx.canvas.width + player.radius ||
-          screenPos.y > this.ctx.canvas.height + player.radius) {
-        continue;
-      }
 
       const color = player.color || 'white';
       if (!colorGroups.has(color)) {
@@ -260,11 +330,16 @@ export class Renderer {
   renderEnemies(enemies, previousEnemies, lerpAmount, camera) {
     if (!enemies || enemies.size === 0) return;
 
-    this.ctx.lineWidth = 3;
-    const fillStyle = '#808080';
-    const strokeStyle = '#666666';
+    this.updateSpatialGrid(enemies, 'enemies');
 
-    for (const [id, enemy] of enemies) {
+    const visibleEnemies = this.getVisibleEntities('enemies', camera);
+    if (visibleEnemies.size === 0) return;
+
+    this.ctx.lineWidth = 3;
+
+    const typeBatches = new Map();
+    
+    for (const [id, enemy] of visibleEnemies) {
       if (!enemy) continue;
 
       let x, y;
@@ -284,19 +359,40 @@ export class Renderer {
 
       const screenPos = camera.worldToScreen(x, y);
 
-      if (screenPos.x < -enemy.radius ||
-          screenPos.y < -enemy.radius ||
-          screenPos.x > this.ctx.canvas.width + enemy.radius ||
-          screenPos.y > this.ctx.canvas.height + enemy.radius) {
-        continue;
+      const fillColor = enemy.type === 2 ? '#a05353' : (enemy.color || '#808080');
+      const strokeColor = enemy.outlineColor || '#666666';
+      const batchKey = `${fillColor}|${strokeColor}`;
+      
+      if (!typeBatches.has(batchKey)) {
+        typeBatches.set(batchKey, {
+          fillColor,
+          strokeColor,
+          enemies: []
+        });
       }
+      
+      typeBatches.get(batchKey).enemies.push({
+        x: screenPos.x,
+        y: screenPos.y,
+        radius: enemy.radius
+      });
+    }
 
-      this.ctx.fillStyle = enemy.type === 2 ? '#a05353' : (enemy.color || fillStyle);
-      this.ctx.strokeStyle = enemy.outlineColor || strokeStyle;
-
+    for (const [, batch] of typeBatches) {
+      this.ctx.fillStyle = batch.fillColor;
       this.ctx.beginPath();
-      this.ctx.arc(screenPos.x, screenPos.y, enemy.radius, 0, Math.PI * 2);
+      for (const enemy of batch.enemies) {
+        this.ctx.moveTo(enemy.x + enemy.radius, enemy.y);
+        this.ctx.arc(enemy.x, enemy.y, enemy.radius, 0, Math.PI * 2);
+      }
       this.ctx.fill();
+      
+      this.ctx.strokeStyle = batch.strokeColor;
+      this.ctx.beginPath();
+      for (const enemy of batch.enemies) {
+        this.ctx.moveTo(enemy.x + enemy.radius, enemy.y);
+        this.ctx.arc(enemy.x, enemy.y, enemy.radius, 0, Math.PI * 2);
+      }
       this.ctx.stroke();
     }
 
@@ -305,10 +401,17 @@ export class Renderer {
 
   renderBullets(bullets, previousBullets, lerpAmount, camera) {
     if (!bullets || bullets.size === 0) return;
+    
+    this.updateSpatialGrid(bullets, 'bullets');
+    
+    const visibleBullets = this.getVisibleEntities('bullets', camera);
+    if (visibleBullets.size === 0) return;
 
     this.ctx.lineWidth = 2;
+    
+    const bulletPositions = [];
 
-    for (const [id, bullet] of bullets) {
+    for (const [id, bullet] of visibleBullets) {
       if (!bullet) continue;
 
       let x, y;
@@ -327,20 +430,28 @@ export class Renderer {
       }
 
       const screenPos = camera.worldToScreen(x, y);
-
-      if (screenPos.x < -bullet.radius ||
-          screenPos.y < -bullet.radius ||
-          screenPos.x > this.ctx.canvas.width + bullet.radius ||
-          screenPos.y > this.ctx.canvas.height + bullet.radius) {
-        continue;
-      }
-
+      bulletPositions.push({
+        x: screenPos.x,
+        y: screenPos.y,
+        radius: bullet.radius
+      });
+    }
+    
+    if (bulletPositions.length > 0) {
       this.ctx.fillStyle = '#a05353';
-      this.ctx.strokeStyle = '#000';
-
       this.ctx.beginPath();
-      this.ctx.arc(screenPos.x, screenPos.y, bullet.radius, 0, Math.PI * 2);
+      for (const bullet of bulletPositions) {
+        this.ctx.moveTo(bullet.x + bullet.radius, bullet.y);
+        this.ctx.arc(bullet.x, bullet.y, bullet.radius, 0, Math.PI * 2);
+      }
       this.ctx.fill();
+      
+      this.ctx.strokeStyle = '#000';
+      this.ctx.beginPath();
+      for (const bullet of bulletPositions) {
+        this.ctx.moveTo(bullet.x + bullet.radius, bullet.y);
+        this.ctx.arc(bullet.x, bullet.y, bullet.radius, 0, Math.PI * 2);
+      }
       this.ctx.stroke();
     }
 
