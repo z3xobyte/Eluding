@@ -12,7 +12,7 @@
         "maxSpeed": 15
       },
       "sniper": {
-        "count": 3,
+        "count": 0,
         "radius": 1,
         "minSpeed": 5,
         "maxSpeed": 8,
@@ -23,7 +23,7 @@
         "bulletSpeed": 5
       },
       "dasher": {
-        "count": 2,
+        "count": 0,
         "radius": 15,
         "minSpeed": 12,
         "maxSpeed": 18,
@@ -32,12 +32,29 @@
         "timeBetweenDashes": 750
       },
       "homing": {
-        "count": 2,
+        "count": 0,
         "radius": 12,
         "minSpeed": 8,
         "maxSpeed": 12,
         "turnIncrement": 0.05,
         "homeRange": 200
+      },
+      "void_crawler": {
+        "count": 0,
+        "radius": 14,
+        "minSpeed": 10,
+        "maxSpeed": 15,
+        "turnIncrement": 0.05,
+        "homeRange": 200
+      },
+      "wall": {
+        "count": 20,
+        "radius": 14,
+        "minSpeed": 8,
+        "maxSpeed": 8,
+        "moveClockwise": true,
+        "patternAlternate": false,
+        "initialSide": 0
       }
     }
   },

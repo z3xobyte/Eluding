@@ -21,6 +21,16 @@ const ENEMY_TYPES = {
     name: 'Homing',
     color: '#7F00FF',
     outlineColor: '#5c4200'
+  },
+  5: {
+    name: 'VoidCrawler',
+    color: '#1c0a2d',
+    outlineColor: '#0d0517'
+  },
+  6: {
+    name: 'Wall',
+    color: '#222222',
+    outlineColor: '#111111'
   }
 };
 
@@ -663,6 +673,340 @@ class Homing extends Enemy {
   }
 }
 
+class VoidCrawler extends Enemy {
+  constructor(x, y, radius, speed, increment = 0.05, homeRange = 200) {
+    super(x, y, radius, speed, 5);
+    this.increment = increment;
+    this.homeRange = homeRange;
+    
+    this.normal_speed = speed;
+    this.base_speed = this.normal_speed;
+    this.prepare_speed = this.normal_speed / 4;
+    this.lurch_speed = this.normal_speed;
+    
+    this.time_preparing = 0;
+    this.time_lurching = 0;
+    this.time_since_last_lurch = 0;
+    
+    this.time_to_lurch = 300;
+    this.time_between_lurches = 0;
+    this.time_to_prepare = 300;
+    
+    this.angle = Math.atan2(this.vy, this.vx);
+    this.targetAngle = this.angle;
+    this.lastUpdateTimeMs = Date.now();
+  }
+  
+  update(map, grid, game) {
+    const currentTimeMs = Date.now();
+    const deltaTimeMs = currentTimeMs - this.lastUpdateTimeMs;
+    this.lastUpdateTimeMs = currentTimeMs;
+    this.behavior(deltaTimeMs, game);
+    super.update(map, grid);
+  }
+  
+  behavior(time, game) {
+    if (this.time_preparing == 0) {
+      if (this.time_lurching == 0) {
+        if (this.time_since_last_lurch < this.time_between_lurches) {
+          this.time_since_last_lurch += time;
+        } else {
+          this.time_since_last_lurch = 0;
+          this.time_preparing += time;
+          this.base_speed = this.prepare_speed;
+        }
+      } else {
+        this.time_lurching += time;
+        if (this.time_lurching >= this.time_to_lurch) {
+          this.time_lurching = 0;
+          this.base_speed = this.normal_speed;
+        } else {
+          this.base_speed = this.lurch_speed * (
+            1 - Math.pow(this.time_lurching / this.time_to_lurch, 5)
+          );
+          this.compute_speed();
+        }
+      }
+    } else {
+      this.time_preparing += time;
+      if (this.time_preparing >= this.time_to_prepare) {
+        this.time_preparing = 0;
+        this.time_lurching += time;
+        this.base_speed = this.lurch_speed;
+      } else {
+        this.base_speed = this.prepare_speed * (
+          1 - (this.time_preparing / this.time_to_prepare)
+        );
+        this.compute_speed();
+      }
+    }
+    this.angle = Math.atan2(this.vy, this.vx);
+    const closestPlayer = this.findClosestPlayer(game);
+    if (closestPlayer) {
+      const dX = closestPlayer.x - this.x;
+      const dY = closestPlayer.y - this.y;
+      this.targetAngle = Math.atan2(dY, dX);
+    }
+
+    const angleDiff = Math.atan2(Math.sin(this.targetAngle - this.angle), Math.cos(this.targetAngle - this.angle));
+    const angleIncrement = this.increment * (time / 30);
+    
+    if (Math.abs(angleDiff) >= this.increment) {
+      this.angle += Math.sign(angleDiff) * angleIncrement;
+    }
+    
+    this.compute_speed();
+  }
+  
+  compute_speed() {
+    this.speed = this.base_speed;
+    this.vx = Math.cos(this.angle) * this.speed;
+    this.vy = Math.sin(this.angle) * this.speed;
+  }
+  
+  findClosestPlayer(game) {
+    if (!game || !game.players) return null;
+    
+    let closestDist = this.homeRange;
+    let closestPlayer = null;
+    
+    for (const [playerId, player] of game.players) {
+      if (player.isDead || player.currentMapId !== game.currentMapId) continue;
+      
+      const dx = player.x - this.x;
+      const dy = player.y - this.y;
+      const dist = Math.sqrt(dx * dx + dy * dy);
+      
+      if (dist < closestDist) {
+        closestDist = dist;
+        closestPlayer = player;
+      }
+    }
+    
+    return closestPlayer;
+  }
+  
+  serialize() {
+    const baseData = super.serialize();
+    return {
+      ...baseData,
+      time_preparing: this.time_preparing,
+      time_lurching: this.time_lurching,
+      time_since_last_lurch: this.time_since_last_lurch,
+      angle: this.angle,
+      targetAngle: this.targetAngle
+    };
+  }
+}
+
+class Wall extends Enemy {
+  constructor(x, y, radius, speed, boundaryX, boundaryY, boundaryWidth, boundaryHeight, wallIndex, count, moveClockwise = true, initialSide = 0, spacing = null) {
+    super(x, y, radius, speed, 6);
+    this.speed = speed;
+    
+    this.boundary = {
+      x: boundaryX,
+      y: boundaryY,
+      w: boundaryWidth,
+      h: boundaryHeight
+    };
+    
+    this.moveClockwise = !moveClockwise;
+    this.wallIndex = wallIndex;
+    this.direction = initialSide;
+    
+    // Calculate initial position based on wallIndex and count
+    const perimeter = 2 * (this.boundary.w + this.boundary.h);
+    
+    // If spacing is provided, use it for precise distribution
+    let distance;
+    if (spacing) {
+      // Calculate position based on exact spacing
+      distance = wallIndex * spacing;
+    } else {
+      // Legacy calculation for backward compatibility
+      distance = wallIndex * perimeter / count;
+    }
+    
+    this.initialSide = initialSide;
+    this.positionAlong(distance, radius);
+    this.applySpeed();
+  }
+  
+  top() {
+    return this.boundary.y;
+  }
+  
+  bottom() {
+    return this.boundary.y + this.boundary.h;
+  }
+  
+  right() {
+    return this.boundary.x + this.boundary.w;
+  }
+  
+  left() {
+    return this.boundary.x;
+  }
+  
+  rotate(direction, moveClockwise) {
+    switch (direction) {
+      case 0: // up
+        return (moveClockwise) ? 3 : 1;
+      case 2: // down
+        return (moveClockwise) ? 1 : 3;
+      case 1: // right
+        return (moveClockwise) ? 0 : 2;
+      case 3: // left
+        return (moveClockwise) ? 2 : 0;
+    }
+  }
+  
+  getVector() {
+    switch (this.direction) {
+      case 0: // up
+        this.vx = 0;
+        this.vy = -this.speed;
+        break;
+      case 2: // down
+        this.vx = 0;
+        this.vy = this.speed;
+        break;
+      case 1: // right
+        this.vx = this.speed;
+        this.vy = 0;
+        break;
+      case 3: // left
+        this.vx = -this.speed;
+        this.vy = 0;
+        break;
+    }
+  }
+  
+  applySpeed() {
+    this.getVector();
+  }
+  
+  positionAlong(distance, radius) {
+    // Set initial position based on initialSide, positioning enemy center at radius distance from boundary
+    if (this.initialSide === 0) {
+      this.x = (this.boundary.w / 2) + this.left();
+      this.y = this.top() + radius;
+    } else if (this.initialSide === 1) {
+      this.x = this.right() - radius;
+      this.y = (this.boundary.h / 2) + this.top();
+    } else if (this.initialSide === 2) {
+      this.x = (this.boundary.w / 2) + this.left();
+      this.y = this.bottom() - radius;
+    } else if (this.initialSide === 3) {
+      this.x = this.left() + radius;
+      this.y = (this.boundary.h / 2) + this.top();
+    }
+    
+    this.direction = this.rotate(this.initialSide, this.moveClockwise);
+    
+    // Move along by distance
+    let antiCrash = 0;
+    while (distance > 0) {
+      if (antiCrash > 1000) {
+        console.error("Anti-crash triggered in Wall enemy positioning");
+        break;
+      }
+      antiCrash++;
+      
+      if (this.direction === 0) { // up
+        this.y -= distance;
+        if (this.y < this.top() + radius) {
+          distance = (this.top() + radius) - this.y;
+          this.y = this.top() + radius;
+          this.direction = this.rotate(this.direction, this.moveClockwise);
+        } else {
+          break;
+        }
+      } else if (this.direction === 1) { // right
+        this.x += distance;
+        if (this.x > this.right() - radius) {
+          distance = this.x - (this.right() - radius);
+          this.x = this.right() - radius;
+          this.direction = this.rotate(this.direction, this.moveClockwise);
+        } else {
+          break;
+        }
+      } else if (this.direction === 2) { // down
+        this.y += distance;
+        if (this.y > this.bottom() - radius) {
+          distance = this.y - (this.bottom() - radius);
+          this.y = this.bottom() - radius;
+          this.direction = this.rotate(this.direction, this.moveClockwise);
+        } else {
+          break;
+        }
+      } else if (this.direction === 3) { // left
+        this.x -= distance;
+        if (this.x < this.left() + radius) {
+          distance = (this.left() + radius) - this.x;
+          this.x = this.left() + radius;
+          this.direction = this.rotate(this.direction, this.moveClockwise);
+        } else {
+          break;
+        }
+      }
+    }
+  }
+  
+  update(map, grid, game) {
+    this.prevX = this.x;
+    this.prevY = this.y;
+    
+    // Apply movement based on current direction
+    const currentTime = Date.now();
+    const deltaTime = (currentTime - this.lastUpdateTime) / 16.67;
+    this.lastUpdateTime = currentTime;
+    
+    // Calculate new position
+    const newX = this.x + this.vx * deltaTime;
+    const newY = this.y + this.vy * deltaTime;
+    
+    const radius = this.radius;
+    
+    // Handle boundary collisions and direction changes
+    if (this.direction === 0 && newY < this.top() + radius) {
+      this.y = this.top() + radius;
+      this.direction = this.rotate(this.direction, this.moveClockwise);
+      this.applySpeed();
+    } else if (this.direction === 1 && newX > this.right() - radius) {
+      this.x = this.right() - radius;
+      this.direction = this.rotate(this.direction, this.moveClockwise);
+      this.applySpeed();
+    } else if (this.direction === 2 && newY > this.bottom() - radius) {
+      this.y = this.bottom() - radius;
+      this.direction = this.rotate(this.direction, this.moveClockwise);
+      this.applySpeed();
+    } else if (this.direction === 3 && newX < this.left() + radius) {
+      this.x = this.left() + radius;
+      this.direction = this.rotate(this.direction, this.moveClockwise);
+      this.applySpeed();
+    } else {
+      // Just move normally if no boundary collision
+      this.x = newX;
+      this.y = newY;
+    }
+    
+    // Update position in grid
+    grid.update(this);
+  }
+  
+  serialize() {
+    const baseData = super.serialize();
+    return {
+      ...baseData,
+      direction: this.direction,
+      moveClockwise: this.moveClockwise,
+      boundary: this.boundary
+    };
+  }
+}
+
 Enemy.initializeGridWithMap = function(map) {
   const effectiveCellSize = map.tileSize || 64;
   const grid = new Grid(map.width * map.tileSize, map.height * map.tileSize, effectiveCellSize);
@@ -683,6 +1027,8 @@ module.exports = {
   Sniper,
   Dasher,
   Homing,
+  VoidCrawler,
+  Wall,
   Bullet,
   ENEMY_TYPES, 
   initializeGridWithMap: Enemy.initializeGridWithMap,
