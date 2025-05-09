@@ -166,7 +166,6 @@ class GameMap {
     const visited = new Array(this.height).fill(0).map(() => new Array(this.width).fill(false));
     const regions = [];
     
-    // Helper function for breadth-first search
     const bfs = (startX, startY) => {
       const queue = [{x: startX, y: startY}];
       const tiles = [];
@@ -176,7 +175,6 @@ class GameMap {
         const {x, y} = queue.shift();
         tiles.push({x, y});
         
-        // Check 4 adjacent tiles
         const directions = [
           {dx: 1, dy: 0},  // right
           {dx: -1, dy: 0}, // left
@@ -188,12 +186,10 @@ class GameMap {
           const nx = x + dx;
           const ny = y + dy;
           
-          // Check boundaries
           if (nx < 0 || nx >= this.width || ny < 0 || ny >= this.height) {
             continue;
           }
           
-          // Check if tile is of correct type and not visited
           if (this.tiles[ny][nx] === tileType && !visited[ny][nx]) {
             visited[ny][nx] = true;
             queue.push({x: nx, y: ny});
@@ -201,7 +197,6 @@ class GameMap {
         }
       }
       
-      // Calculate region extrema
       const minX = Math.min(...tiles.map(t => t.x));
       const maxX = Math.max(...tiles.map(t => t.x));
       const minY = Math.min(...tiles.map(t => t.y));
@@ -220,7 +215,6 @@ class GameMap {
       };
     };
     
-    // Find all connected regions
     for (let y = 0; y < this.height; y++) {
       for (let x = 0; x < this.width; x++) {
         if (this.tiles[y][x] === tileType && !visited[y][x]) {

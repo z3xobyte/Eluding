@@ -21,7 +21,7 @@ class Game {
     this._bulletIdCounter = 1;
     this._idMapNeedsUpdate = true;
     this._updateCounter = 0;
-    this._unusedMapTimeout = 300;
+    this._unusedMapTimeout = 5;
     this._mapLastAccessed = new Map();
   }
   
@@ -158,23 +158,19 @@ class Game {
           totalEnemiesSpawned++;
         }
       } else if (type === "wall") {
-        // Find all connected regions of type 1 tiles to create wall boundaries
         const regions = map.findConnectedRegions(1);
         let wallsSpawned = 0;
         
-        // Get movement configuration options
         const moveClockwise = config.moveClockwise !== undefined ? config.moveClockwise : true;
         const patternAlternate = config.patternAlternate !== undefined ? config.patternAlternate : false;
         const initialSide = config.initialSide !== undefined ? config.initialSide : 0;
         
-        // Sort regions by perimeter size (largest first) to ensure better distribution
         regions.sort((a, b) => {
           const perimeterA = 2 * ((a.maxX - a.minX + 1) + (a.maxY - a.minY + 1));
           const perimeterB = 2 * ((b.maxX - b.minX + 1) + (b.maxY - b.minY + 1));
           return perimeterB - perimeterA;
         });
         
-        // Calculate total perimeter of all regions to distribute walls proportionally
         let totalPerimeter = 0;
         const regionPerimeters = regions.map(region => {
           const width = (region.maxX - region.minX + 1) * map.tileSize;
@@ -184,54 +180,42 @@ class Game {
           return { region, perimeter };
         });
         
-        // Calculate minimum viable perimeter size for any walls (to prevent walls in tiny areas)
-        const minViablePerimeter = radius * 10; // Need at least a perimeter that can fit a few walls
+        const minViablePerimeter = radius * 10;
         
-        // Distribute walls based on perimeter size
         for (const { region, perimeter } of regionPerimeters) {
-          // Skip regions that are too small to fit walls with proper spacing
           if (perimeter < minViablePerimeter) {
             console.log(`Region too small (perimeter: ${perimeter}) for wall placement, skipping`);
             continue;
           }
           
-          // Calculate proportional wall count for this region
           const regionWallCount = Math.max(1, Math.floor((perimeter / totalPerimeter) * count));
           
-          if (region.tiles.length < 4) continue; // Skip tiny regions
+          if (region.tiles.length < 4) continue;
           
-          // Convert region to boundary
           const minX = Math.min(...region.tiles.map(t => t.x));
           const maxX = Math.max(...region.tiles.map(t => t.x));
           const minY = Math.min(...region.tiles.map(t => t.y));
           const maxY = Math.max(...region.tiles.map(t => t.y));
           
-          // Create boundary with tile coordinates converted to world coordinates
           const boundaryX = minX * map.tileSize;
           const boundaryY = minY * map.tileSize;
           const boundaryWidth = (maxX - minX + 1) * map.tileSize;
           const boundaryHeight = (maxY - minY + 1) * map.tileSize;
           
-          // Calculate minimum spacing based on radius to prevent overlaps
-          const minSpacing = radius * 3; // 3x radius provides good visual spacing
+          const minSpacing = radius * 3;
           
-          // Calculate perimeter and maximum number of walls that can fit with minimum spacing
           const regionPerimeter = 2 * (boundaryWidth + boundaryHeight);
           const maxWallsWithSpacing = Math.floor(regionPerimeter / minSpacing);
           
-          // Skip regions that can't fit at least 2 walls with proper spacing
           if (maxWallsWithSpacing < 2) {
             console.log(`Region can only fit ${maxWallsWithSpacing} walls with proper spacing, skipping`);
             continue;
           }
-          
-          // Use the smaller of our calculated count and max with spacing
+              
           const wallsForThisRegion = Math.min(regionWallCount, maxWallsWithSpacing, count - wallsSpawned);
           
-          // Calculate actual spacing for even distribution
           const actualSpacing = regionPerimeter / wallsForThisRegion;
           
-          // Create temporary walls for validation
           const tempWalls = [];
           for (let i = 0; i < wallsForThisRegion; i++) {
             const speed = minSpeed + Math.random() * (maxSpeed - minSpeed);
@@ -239,7 +223,7 @@ class Game {
             const wallInitialSide = initialSide;
             
             const wall = new Wall(
-              0, // x and y will be set by the Wall constructor
+              0, 
               0, 
               radius,
               speed,
@@ -251,18 +235,16 @@ class Game {
               wallsForThisRegion,
               wallMoveClockwise,
               wallInitialSide,
-              actualSpacing // Pass the proper spacing to ensure even distribution
+              actualSpacing
             );
             
             tempWalls.push(wall);
           }
           
-          // Check for overlaps and only add walls that don't overlap
           const validWalls = [];
           for (const wall of tempWalls) {
             let overlaps = false;
             
-            // Check against already validated walls
             for (const validWall of validWalls) {
               const dx = wall.x - validWall.x;
               const dy = wall.y - validWall.y;
@@ -279,7 +261,6 @@ class Game {
             }
           }
           
-          // Add only valid walls to the game
           for (const wall of validWalls) {
             wall.addToGrid(grid);
             enemiesOnThisMap.set(wall.id, wall);

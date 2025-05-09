@@ -385,13 +385,11 @@ class Dasher extends Enemy {
     this.time_preparing = 0;
     this.time_since_last_dash = 0;
     this.lastUpdateTimeMs = Date.now();
-    
-    // Store the original direction
+
     this.originalVx = this.vx;
     this.originalVy = this.vy;
     this.originalSpeed = Math.sqrt(this.vx * this.vx + this.vy * this.vy);
-    
-    // Track if we've hit a wall in the last update
+
     this.hitWall = false;
   }
   
@@ -401,17 +399,13 @@ class Dasher extends Enemy {
     if (this.time_since_last_dash < this.time_between_dashes && 
         this.time_dashing == 0 && 
         this.time_preparing == 0) {
-      // Waiting period - no movement
       newSpeed = 0;
     } else if (this.time_dashing == 0) {
-      // Preparing to dash
       newSpeed = this.prepare_speed;
     } else {
-      // During dash
       newSpeed = this.base_speed;
     }
     
-    // Only update velocity if speed changed
     if (newSpeed !== this.speed) {
       this.speed = newSpeed;
       this.updateVelocity();
@@ -425,7 +419,6 @@ class Dasher extends Enemy {
       return;
     }
     
-    // Maintain the original direction but adjust speed
     if (this.originalSpeed > 0) {
       const dirX = this.originalVx / this.originalSpeed;
       const dirY = this.originalVy / this.originalSpeed;
@@ -433,7 +426,6 @@ class Dasher extends Enemy {
       this.vx = dirX * this.speed;
       this.vy = dirY * this.speed;
     } else {
-      // If no original direction, pick a random one
       const angle = Math.random() * Math.PI * 2;
       this.vx = Math.cos(angle) * this.speed;
       this.vy = Math.sin(angle) * this.speed;
@@ -445,24 +437,17 @@ class Dasher extends Enemy {
     }
   }
   
-  // Override the parent class update method to preserve our direction control
   update(map, grid, game) {
-    // Calculate time elapsed since last update in milliseconds
     const currentTimeMs = Date.now();
     const deltaTimeMs = currentTimeMs - this.lastUpdateTimeMs;
     this.lastUpdateTimeMs = currentTimeMs;
     
-    // Save current position to detect collisions
     const prevX = this.x;
     const prevY = this.y;
     const prevVx = this.vx;
     const prevVy = this.vy;
     
-    // Apply the behavior logic matching the reference implementation
     this.behavior(deltaTimeMs);
-    
-    // Call the parent update without using super to avoid random direction changes
-    // This is modified version of Enemy.prototype.update that preserves our direction
     
     const currentTime = Date.now();
     const deltaTime = (currentTime - this.lastUpdateTime) / 16.67;
@@ -538,7 +523,6 @@ class Dasher extends Enemy {
       grid.update(this);
     }
     
-    // If we hit a wall, update our direction tracking
     if (this.hitWall) {
       this.originalVx = this.vx;
       this.originalVy = this.vy;
@@ -601,41 +585,33 @@ class Homing extends Enemy {
   }
   
   update(map, grid, game) {
-    // Calculate time elapsed since last update in milliseconds
     const currentTimeMs = Date.now();
     const deltaTimeMs = currentTimeMs - this.lastUpdateTimeMs;
     this.lastUpdateTimeMs = currentTimeMs;
     
-    // Apply behavior before parent update (set new direction)
     this.behavior(deltaTimeMs, game);
     
-    // Do regular collision handling from parent class
     super.update(map, grid);
   }
   
   behavior(time, game) {
-    // Always update current angle from velocity
     this.angle = Math.atan2(this.vy, this.vx);
     
-    // Check for closest player
     const closestPlayer = this.findClosestPlayer(game);
     
-    // If player found in range, update target angle
     if (closestPlayer) {
       const dX = closestPlayer.x - this.x;
       const dY = closestPlayer.y - this.y;
       this.targetAngle = Math.atan2(dY, dX);
     }
     
-    // Always adjust angle toward target (even if no player, will maintain current direction)
     const angleDiff = Math.atan2(Math.sin(this.targetAngle - this.angle), Math.cos(this.targetAngle - this.angle));
-    const angleIncrement = this.increment * (time / 30);
+    const angleIncrement = this.increment * (time / 60);
     
     if (Math.abs(angleDiff) >= this.increment) {
       this.angle += Math.sign(angleDiff) * angleIncrement;
     }
     
-    // Convert angle to velocity
     this.vx = Math.cos(this.angle) * this.speed;
     this.vy = Math.sin(this.angle) * this.speed;
   }
@@ -815,16 +791,12 @@ class Wall extends Enemy {
     this.wallIndex = wallIndex;
     this.direction = initialSide;
     
-    // Calculate initial position based on wallIndex and count
     const perimeter = 2 * (this.boundary.w + this.boundary.h);
     
-    // If spacing is provided, use it for precise distribution
     let distance;
     if (spacing) {
-      // Calculate position based on exact spacing
       distance = wallIndex * spacing;
     } else {
-      // Legacy calculation for backward compatibility
       distance = wallIndex * perimeter / count;
     }
     
@@ -888,7 +860,6 @@ class Wall extends Enemy {
   }
   
   positionAlong(distance, radius) {
-    // Set initial position based on initialSide, positioning enemy center at radius distance from boundary
     if (this.initialSide === 0) {
       this.x = (this.boundary.w / 2) + this.left();
       this.y = this.top() + radius;
@@ -905,7 +876,6 @@ class Wall extends Enemy {
     
     this.direction = this.rotate(this.initialSide, this.moveClockwise);
     
-    // Move along by distance
     let antiCrash = 0;
     while (distance > 0) {
       if (antiCrash > 1000) {
@@ -958,18 +928,15 @@ class Wall extends Enemy {
     this.prevX = this.x;
     this.prevY = this.y;
     
-    // Apply movement based on current direction
     const currentTime = Date.now();
     const deltaTime = (currentTime - this.lastUpdateTime) / 16.67;
     this.lastUpdateTime = currentTime;
     
-    // Calculate new position
     const newX = this.x + this.vx * deltaTime;
     const newY = this.y + this.vy * deltaTime;
     
     const radius = this.radius;
     
-    // Handle boundary collisions and direction changes
     if (this.direction === 0 && newY < this.top() + radius) {
       this.y = this.top() + radius;
       this.direction = this.rotate(this.direction, this.moveClockwise);
@@ -987,12 +954,10 @@ class Wall extends Enemy {
       this.direction = this.rotate(this.direction, this.moveClockwise);
       this.applySpeed();
     } else {
-      // Just move normally if no boundary collision
       this.x = newX;
       this.y = newY;
     }
-    
-    // Update position in grid
+
     grid.update(this);
   }
   

@@ -72,8 +72,6 @@ class Player {
   }
 
   update(map, gameInstance) {
-    this.collisionCache.clear();
-    
     const grid = gameInstance.mapGrids.get(this.currentMapId);
     if (!grid) return;
     if (this.teleporterCooldown > 0) {
@@ -99,7 +97,7 @@ class Player {
 
     this.lastPosition = { x: this.x, y: this.y };
 
-    if (currentTime - this.lastCacheCleanup > 500) {
+    if (currentTime - this.lastCacheCleanup > 1000) {
       this.collisionCache.clear();
       this.lastCacheCleanup = currentTime;
     }
@@ -225,15 +223,21 @@ class Player {
   }
   
   collidesWithWall(x, y, map) {
-    const cacheKey = `${x.toFixed(1)},${y.toFixed(1)}`;
+    const cacheKey = `${Math.floor(x * 10) / 10},${Math.floor(y * 10) / 10}`;
     if (this.collisionCache.has(cacheKey)) {
       return this.collisionCache.get(cacheKey);
     }
     
     const result = this.spatialCheckCollision(x, y, map);
     
-    this.collisionCache.set(cacheKey, result);
+    if (this.collisionCache.size > 1000) {
+      const iterator = this.collisionCache.keys();
+      for (let i = 0; i < 200; i++) {
+        this.collisionCache.delete(iterator.next().value);
+      }
+    }
     
+    this.collisionCache.set(cacheKey, result);
     return result;
   }
   
@@ -245,12 +249,29 @@ class Player {
     const playerTop = y - this.radius;
     const playerBottom = y + this.radius;
     
+    if (playerRight < 0 || playerLeft >= map.width * tileSize || 
+        playerBottom < 0 || playerTop >= map.height * tileSize) {
+      return false;
+    }
+    
     const leftTile = Math.floor(playerLeft / tileSize);
     const rightTile = Math.floor(playerRight / tileSize);
     const topTile = Math.floor(playerTop / tileSize);
     const bottomTile = Math.floor(playerBottom / tileSize);
     
-    return this.checkTilesInRange(leftTile, rightTile, topTile, bottomTile, map);
+    if (leftTile < 0 || rightTile >= map.width || topTile < 0 || bottomTile >= map.height) {
+      return true;
+    }
+    
+    for (let tx = Math.max(0, leftTile); tx <= Math.min(rightTile, map.width - 1); tx++) {
+      for (let ty = Math.max(0, topTile); ty <= Math.min(bottomTile, map.height - 1); ty++) {
+        if (map.isWall(tx, ty)) {
+          return true;
+        }
+      }
+    }
+    
+    return false;
   }
   
   checkTilesInRange(left, right, top, bottom, map) {
@@ -258,16 +279,25 @@ class Player {
       return false;
     }
     
-    for (let tx = Math.max(0, left); tx <= Math.min(right, map.width - 1); tx++) {
-      for (let ty = Math.max(0, top); ty <= Math.min(bottom, map.height - 1); ty++) {
+    if (left < 0 || right >= map.width || top < 0 || bottom >= map.height) {
+      return true;
+    }
+    
+    const startX = Math.max(0, left);
+    const endX = Math.min(right, map.width - 1);
+    const startY = Math.max(0, top);
+    const endY = Math.min(bottom, map.height - 1);
+    
+    if (startX > endX || startY > endY) {
+      return false;
+    }
+    
+    for (let tx = startX; tx <= endX; tx++) {
+      for (let ty = startY; ty <= endY; ty++) {
         if (map.isWall(tx, ty)) {
           return true;
         }
       }
-    }
-    
-    if (left < 0 || right >= map.width || top < 0 || bottom >= map.height) {
-      return true;
     }
     
     return false;
