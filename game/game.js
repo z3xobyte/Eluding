@@ -1,0 +1,501 @@
+const zlib = require('zlib');
+const { Enemy, Sniper, Bullet, ENEMY_TYPES, initializeGridWithMap } = require('./enemy');
+const { Player } = require('./player');
+const { Grid } = require('./grid');
+
+class Game {
+  constructor(mapManager) {
+    this.mapManager = mapManager;
+    this.players = new Map();
+    this.connections = new Map();
+    this.mapEnemies = new Map();
+    this.mapBullets = new Map();
+    this.mapGrids = new Map();
+    this.lastUpdateTime = Date.now();
+    this.updateInterval = null;
+    this._cachedPlayerIds = new Map();
+    this._cachedEnemyIds = new Map();
+    this._cachedBulletIds = new Map();
+    this._playerIdCounter = 1;
+    this._enemyIdCounter = 1;
+    this._bulletIdCounter = 1;
+    this._idMapNeedsUpdate = true;
+    this._updateCounter = 0;
+  }
+  
+  async loadMapIfNeeded(mapId) {
+    if (!this.mapGrids.has(mapId) || !this.mapEnemies.has(mapId)) {
+      const map = this.mapManager.getMapById(mapId);
+      if (!map) {
+        console.error(`Failed to load map: ${mapId}. Map not found.`);
+        return null;
+      }
+
+      console.log(`Loading map resources for ${mapId}...`);
+      const grid = initializeGridWithMap(map);
+      this.mapGrids.set(mapId, grid);
+
+      this.mapEnemies.set(mapId, new Map());
+      this.mapBullets.set(mapId, new Map());
+      this.spawnEnemiesForMap(mapId, map, grid);
+      console.log(`Map resources for ${mapId} loaded.`);
+      return map;
+    }
+    return this.mapManager.getMapById(mapId);
+  }
+  
+  spawnEnemiesForMap(mapId, map, grid) {
+    if (!map || !grid) {
+      console.error(`Cannot spawn enemies for ${mapId}, map or grid missing.`);
+      return;
+    }
+    const enemiesOnThisMap = this.mapEnemies.get(mapId);
+    if (!enemiesOnThisMap) {
+      console.error(`Enemy map not initialized for ${mapId}`);
+      return;
+    }
+
+    const { spawnTileType, types } = map.enemyConfig;
+    let totalEnemiesSpawned = 0;
+
+    // Process each enemy type
+    for (const [type, config] of Object.entries(types)) {
+      const { count, radius, minSpeed, maxSpeed } = config;
+      
+      if (type === "basic") {
+        // Spawn basic enemies
+        for (let i = 0; i < count; i++) {
+          const spawnPos = map.getValidSpawnPosition(spawnTileType, radius, grid);
+          if (!spawnPos) continue;
+
+          const speed = minSpeed + Math.random() * (maxSpeed - minSpeed);
+          const enemy = new Enemy(spawnPos.x, spawnPos.y, radius, speed, 1);
+          
+          enemy.addToGrid(grid);
+          enemiesOnThisMap.set(enemy.id, enemy);
+          totalEnemiesSpawned++;
+        }
+      } else if (type === "sniper") {
+        for (let i = 0; i < count; i++) {
+          const spawnPos = map.getValidSpawnPosition(spawnTileType, radius, grid);
+          if (!spawnPos) continue;
+
+          const speed = minSpeed + Math.random() * (maxSpeed - minSpeed);
+          const sniper = new Sniper(
+            spawnPos.x, 
+            spawnPos.y, 
+            radius, 
+            speed,
+            config.detectionRange,
+            config.shootingRange,
+            config.maxShootCooldown,
+            config.bulletRadius,
+            config.bulletSpeed
+          );
+          
+          sniper.addToGrid(grid);
+          enemiesOnThisMap.set(sniper.id, sniper);
+          totalEnemiesSpawned++;
+        }
+      }
+    }
+    
+    console.log(`Spawned ${totalEnemiesSpawned} enemies for map ${mapId} (Types: ${Object.keys(types).join(', ')})`);
+  }
+  
+  async addPlayer(player, connection, initialMapId = 'map1') {
+    player.currentMapId = initialMapId;
+    await this.loadMapIfNeeded(initialMapId);
+
+    this.players.set(player.id, player);
+    this.connections.set(player.id, connection);
+    
+    this.broadcastNewPlayer(player);
+    this._idMapNeedsUpdate = true;
+  }
+  
+  removePlayer(playerId) {
+    const player = this.players.get(playerId);
+    if (player) {
+      this.players.delete(playerId);
+      this.connections.delete(playerId);
+      this._cachedPlayerIds.delete(player.id);
+      this._idMapNeedsUpdate = true;
+      this.broadcastPlayerLeave(playerId, player.currentMapId);
+    }
+  }
+  
+  updatePlayerDirection(playerId, mouseX, mouseY) {
+    const player = this.players.get(playerId);
+    if (player) {
+      player.setTarget(mouseX, mouseY);
+    }
+  }
+  
+  start() {
+    this.updateInterval = setInterval(() => this.update(), 16);
+  }
+  
+  stop() {
+    clearInterval(this.updateInterval);
+  }
+  
+  update() {
+    const currentTime = Date.now();
+    this.lastUpdateTime = currentTime;
+    
+    for (const [playerId, player] of this.players) {
+      const mapId = player.currentMapId;
+      const map = this.mapManager.getMapById(mapId);
+      const grid = this.mapGrids.get(mapId);
+
+      if (!map || !grid) {
+        console.warn(`Player ${playerId} on unloaded map ${mapId}. Skipping update.`);
+        continue;
+      }
+      player.update(map, this);
+    }
+    
+    for (const [mapId, enemiesOnThisMap] of this.mapEnemies) {
+      const map = this.mapManager.getMapById(mapId);
+      const grid = this.mapGrids.get(mapId);
+      if (!map || !grid) {
+        console.warn(`Skipping enemy updates for unloaded map ${mapId}.`);
+        continue;
+      }
+
+      this.currentMapId = mapId;
+      
+      for (const [enemyId, enemy] of enemiesOnThisMap) {
+        if (enemy instanceof Sniper) {
+          enemy.update(map, grid, this);
+        } else {
+          enemy.update(map, grid);
+        }
+      }
+
+      const bulletsOnThisMap = this.mapBullets.get(mapId) || new Map();
+      for (const [bulletId, bullet] of bulletsOnThisMap) {
+        if (!bullet.isActive) {
+          bullet.removeFromGrid(grid);
+          bulletsOnThisMap.delete(bulletId);
+          continue;
+        }
+        bullet.update(map, grid);
+      }
+    }
+    
+    this.checkCollisions();
+    
+    this.broadcastGameState();
+  }
+  
+  checkCollisions() {
+    const playersByMap = new Map();
+    for (const player of this.players.values()) {
+      if (!playersByMap.has(player.currentMapId)) {
+        playersByMap.set(player.currentMapId, []);
+      }
+      playersByMap.get(player.currentMapId).push(player);
+    }
+
+    for (const [mapId, playersOnThisMap] of playersByMap) {
+      const grid = this.mapGrids.get(mapId);
+      const enemiesOnThisMap = this.mapEnemies.get(mapId);
+      const bulletsOnThisMap = this.mapBullets.get(mapId) || new Map();
+      const currentMap = this.mapManager.getMapById(mapId);
+
+      if (!grid || !enemiesOnThisMap || !currentMap) continue;
+
+      for (const player of playersOnThisMap) {
+        if (player.isDead) continue;
+        
+        const queryRadius = player.radius + 30;
+        const nearbyEnemyIds = grid.queryArea(player.x, player.y, queryRadius);
+
+        for (const enemyId of nearbyEnemyIds) {
+          const enemy = enemiesOnThisMap.get(enemyId);
+          if (!enemy) continue;
+
+          const dx = player.x - enemy.x;
+          const dy = player.y - enemy.y;
+          const rSum = player.radius + enemy.radius;
+
+          if (dx * dx + dy * dy < rSum * rSum) {
+            player.hitByEnemy();
+            break;
+          }
+        }
+        
+        // Check bullet collisions
+        if (!player.isDead) {
+          const nearbyBulletIds = grid.queryArea(player.x, player.y, queryRadius);
+          
+          for (const bulletId of nearbyBulletIds) {
+            const bullet = bulletsOnThisMap.get(bulletId);
+            if (!bullet || !bullet.isActive) continue;
+            
+            const dx = player.x - bullet.x;
+            const dy = player.y - bullet.y;
+            const rSum = player.radius + bullet.radius;
+
+            if (dx * dx + dy * dy < rSum * rSum) {
+              player.hitByEnemy(); // Reuse same method as enemy collision
+              bullet.isActive = false; // Deactivate bullet after hit
+              break;
+            }
+          }
+        }
+      }
+
+      const len = playersOnThisMap.length;
+      for (let i = 0; i < len; i++) {
+        const p1 = playersOnThisMap[i];
+        if (p1.isDead) continue;
+
+        for (let j = 0; j < len; j++) {
+          if (i === j) continue;
+          const p2 = playersOnThisMap[j];
+          if (!p2.isDead) continue;
+
+          const dx = p1.x - p2.x;
+          const dy = p1.y - p2.y;
+          const rSum = p1.radius + p2.radius;
+
+          if (dx * dx + dy * dy < rSum * rSum) {
+            p2.reviveByPlayer();
+          }
+        }
+      }
+    }
+  }
+  
+  async handlePlayerTeleport(playerId, teleporterUsed) {
+    const player = this.players.get(playerId);
+    if (!player) return;
+    const teleporterCode = teleporterUsed.code;
+    const currentMapId = player.currentMapId;
+    
+    console.log(`[GAME] Handling teleport for player ${playerId.substring(0, 8)} with code: ${teleporterCode}`);
+
+    if (!teleporterCode) {
+      console.log(`[GAME] Player ${playerId.substring(0, 8)} used a teleporter with no code. Ignoring.`);
+      return;
+    }
+    let destinationMapId = null;
+    for (const [mapId, map] of Object.entries(this.mapManager.maps)) {
+      if (mapId !== currentMapId) {
+        const teleporter = map.getTeleporterByCode(teleporterCode);
+        if (teleporter) {
+          destinationMapId = mapId;
+          break;
+        }
+      }
+    }
+
+    if (!destinationMapId) {
+      console.log(`[GAME] Player ${playerId.substring(0, 8)} used teleporter with code ${teleporterCode} on ${currentMapId}, but no destination map found.`);
+      return;
+    }
+    const destinationMap = await this.loadMapIfNeeded(destinationMapId);
+    if (!destinationMap) {
+      console.error(`[GAME] Teleport failed for player ${playerId.substring(0, 8)}: Destination map ${destinationMapId} could not be loaded.`);
+      return;
+    }
+    const targetTeleporter = destinationMap.getTeleporterByCode(teleporterCode);
+    if (!targetTeleporter) {
+      console.error(`[GAME] Teleport failed for player ${playerId.substring(0, 8)}: No teleporter with code ${teleporterCode} found on map ${destinationMapId}.`);
+      return;
+    }
+    const newX = targetTeleporter.tileX * destinationMap.tileSize + destinationMap.tileSize / 2;
+    const newY = targetTeleporter.tileY * destinationMap.tileSize + destinationMap.tileSize / 2;
+    const oldMapId = player.currentMapId;
+    player.x = newX;
+    player.y = newY;
+    player.currentMapId = destinationMapId;
+    player.lastTeleporterCodeUsed = teleporterCode;
+    player.isOnTeleporter = true;
+    player.isFullyInsideTeleporter = true;
+    player.wasFullyOutsideTeleporter = false;
+    player.canTeleport = false;
+    player.teleporterCooldown = 60;
+
+    console.log(`[GAME] Player ${playerId.substring(0, 8)} teleported from ${oldMapId} to ${destinationMapId} at (${newX}, ${newY}) via teleporter with code ${teleporterCode}`);
+    const connection = this.connections.get(playerId);
+    if (connection && connection.readyState === 1) {
+      const enemiesOnNewMap = this.mapEnemies.get(destinationMapId) || new Map();
+      const serializedEnemies = Array.from(enemiesOnNewMap.values()).map(e => e.serialize());
+      
+      const bulletsOnNewMap = this.mapBullets.get(destinationMapId) || new Map();
+      const serializedBullets = Array.from(bulletsOnNewMap.values())
+        .filter(b => b.isActive)
+        .map(b => b.serialize());
+      
+      const mapChangeData = {
+        type: 'mapChange',
+        newMapId: destinationMapId,
+        map: destinationMap.tiles,
+        mapWidth: destinationMap.width,
+        mapHeight: destinationMap.height,
+        tileSize: destinationMap.tileSize,
+        enemyTypes: ENEMY_TYPES,
+        enemies: serializedEnemies,
+        bullets: serializedBullets,
+        playerData: player.serialize()
+      };
+      const message = JSON.stringify(mapChangeData);
+      try {
+        const compressed = zlib.gzipSync(message);
+        connection.send(compressed);
+      } catch (e) {
+        console.error("Failed to compress and send mapChange data:", e);
+        connection.send(message);
+      }
+    }
+    this._idMapNeedsUpdate = true;
+  }
+  
+  broadcastGameState() {
+    this._updateCounter++;
+    const needsFullIdMapForAll = this._idMapNeedsUpdate || this._updateCounter < 5;
+
+    if (needsFullIdMapForAll) {
+      this._cachedPlayerIds.clear();
+      this._cachedEnemyIds.clear();
+      this._cachedBulletIds.clear();
+      this._playerIdCounter = 1;
+      this._enemyIdCounter = 1;
+      this._bulletIdCounter = 1;
+      
+      for (const player of this.players.values()) {
+        if (!this._cachedPlayerIds.has(player.id)) {
+          this._cachedPlayerIds.set(player.id, this._playerIdCounter++);
+        }
+      }
+      for (const enemiesOnMap of this.mapEnemies.values()) {
+        for (const enemy of enemiesOnMap.values()) {
+          if (!this._cachedEnemyIds.has(enemy.id)) {
+            this._cachedEnemyIds.set(enemy.id, this._enemyIdCounter++);
+          }
+        }
+      }
+      for (const bulletsOnMap of this.mapBullets.values()) {
+        for (const bullet of bulletsOnMap.values()) {
+          if (!this._cachedBulletIds.has(bullet.id)) {
+            this._cachedBulletIds.set(bullet.id, this._bulletIdCounter++);
+          }
+        }
+      }
+    }
+    
+    for (const [playerId, connection] of this.connections) {
+      if (connection.readyState !== 1) continue;
+
+      const player = this.players.get(playerId);
+      if (!player) continue;
+
+      const playerMapId = player.currentMapId;
+      
+      const playersOnThisMap = [];
+      for (const p of this.players.values()) {
+        if (p.currentMapId === playerMapId) {
+          playersOnThisMap.push(p);
+        }
+      }
+
+      const enemiesToSerialise = this.mapEnemies.get(playerMapId) || new Map();
+      const bulletsToSerialise = this.mapBullets.get(playerMapId) || new Map();
+
+      const gameState = {
+        t: 'u',
+        p: playersOnThisMap.map(p => [
+          this._cachedPlayerIds.get(p.id) || p.id,
+          Math.round(p.x),
+          Math.round(p.y),
+          p.isDead ? 1 : 0
+        ]),
+        e: Array.from(enemiesToSerialise.values()).map(e => [
+          this._cachedEnemyIds.get(e.id) || e.id,
+          e.type,
+          Math.round(e.x),
+          Math.round(e.y),
+          e.radius
+        ]),
+        b: Array.from(bulletsToSerialise.values())
+          .filter(b => b.isActive)
+          .map(b => [
+            this._cachedBulletIds.get(b.id) || b.id,
+            Math.round(b.x),
+            Math.round(b.y),
+            b.radius
+          ])
+      };
+
+      if (needsFullIdMapForAll) {
+        gameState.idMap = { p: {}, e: {}, b: {} };
+        for (const p of playersOnThisMap) {
+          const shortId = this._cachedPlayerIds.get(p.id);
+          if (shortId) gameState.idMap.p[shortId] = p.id;
+        }
+        for (const e of enemiesToSerialise.values()) {
+          const shortId = this._cachedEnemyIds.get(e.id);
+          if (shortId) gameState.idMap.e[shortId] = e.id;
+        }
+        for (const b of bulletsToSerialise.values()) {
+          if (!b.isActive) continue;
+          const shortId = this._cachedBulletIds.get(b.id);
+          if (shortId) gameState.idMap.b[shortId] = b.id;
+        }
+      }
+      
+      const message = JSON.stringify(gameState);
+      try {
+        const compressed = zlib.gzipSync(message);
+        connection.send(compressed);
+      } catch (e) {
+        console.error("Failed to compress and send game state:", e);
+      }
+    }
+    if (needsFullIdMapForAll) {
+      this._idMapNeedsUpdate = false;
+    }
+  }
+  
+  broadcastNewPlayer(newPlayer) {
+    const messageData = {
+      type: 'newPlayer',
+      player: newPlayer.serialize()
+    };
+    const message = JSON.stringify(messageData);
+    const compressed = zlib.gzipSync(message);
+
+    for (const [playerId, connection] of this.connections) {
+      const existingPlayer = this.players.get(playerId);
+      if (existingPlayer && existingPlayer.id !== newPlayer.id && existingPlayer.currentMapId === newPlayer.currentMapId) {
+        if (connection.readyState === 1) {
+          connection.send(compressed);
+        }
+      }
+    }
+  }
+  
+  broadcastPlayerLeave(leftPlayerId, mapIdOfLeftPlayer) {
+    const messageData = {
+      type: 'playerLeave',
+      playerId: leftPlayerId
+    };
+    const message = JSON.stringify(messageData);
+    const compressed = zlib.gzipSync(message);
+
+    for (const [playerId, connection] of this.connections) {
+      const existingPlayer = this.players.get(playerId);
+      if (existingPlayer && existingPlayer.currentMapId === mapIdOfLeftPlayer) {
+        if (connection.readyState === 1) {
+          connection.send(compressed);
+        }
+      }
+    }
+  }
+}
+
+module.exports = { Game }; 

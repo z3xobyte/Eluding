@@ -1,0 +1,707 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Map Editor</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/dat-gui/0.7.9/dat.gui.min.js"></script>
+    <style>
+        :root {
+            --primary-color: #4a6fa5;
+            --secondary-color: #166088;
+            --accent-color: #47b8e0;
+            --dark-color: #121212;
+            --light-color: #f5f5f5;
+            --success-color: #48c774;
+            --warning-color: #ffdd57;
+            --danger-color: #f14668;
+        }
+        
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        }
+        
+        body {
+            background-color: var(--dark-color);
+            color: var(--light-color);
+            overflow: hidden;
+            height: 100vh;
+            width: 100vw;
+            display: flex;
+            flex-direction: column;
+        }
+
+        #toolbar {
+            background-color: #1e1e1e;
+            padding: 10px;
+            display: flex;
+            gap: 10px;
+            border-bottom: 1px solid #333;
+        }
+        
+        .canvas-container {
+            flex: 1;
+            overflow: auto;
+            position: relative;
+            background-color: #2a2a2a;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+        
+        #mapCanvas {
+            background-color: #333;
+            cursor: pointer;
+            box-shadow: 0 0 20px rgba(0, 0, 0, 0.5);
+        }
+        
+        .tile-selector {
+            display: flex;
+            gap: 8px;
+            align-items: center;
+        }
+        
+        .tile {
+            width: 30px;
+            height: 30px;
+            border-radius: 4px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: bold;
+            transition: transform 0.1s;
+        }
+        
+        .tile:hover {
+            transform: scale(1.05);
+        }
+        
+        .tile.selected {
+            border: 2px solid var(--accent-color);
+            box-shadow: 0 0 8px var(--accent-color);
+        }
+        
+        .tile-wall {
+            background-color: #333;
+            color: white;
+        }
+        
+        .tile-floor {
+            background-color: #666;
+            color: white;
+        }
+        
+        .tile-safe {
+            background-color: #48c774;
+            color: white;
+        }
+        
+        .tile-teleporter {
+            background-color: #9c59b6;
+            color: white;
+        }
+        
+        button {
+            background-color: #4a6fa5;
+            color: white;
+            border: none;
+            padding: 6px 12px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 0.9rem;
+        }
+        
+        button:hover {
+            background-color: #166088;
+        }
+        
+        .spacer {
+            flex: 1;
+        }
+        
+        #zoomControls {
+            position: absolute;
+            bottom: 20px;
+            right: 20px;
+            display: flex;
+            gap: 10px;
+        }
+        
+        .zoom-btn {
+            width: 40px;
+            height: 40px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.5rem;
+            background-color: rgba(30, 30, 30, 0.8);
+            border-radius: 50%;
+        }
+
+        .dg.main {
+            margin-right: 15px;
+            
+        }
+        
+        .dg {
+            font-size: 12px;
+        }
+        
+        .dg .c input[type=text] {
+            line-height: normal;
+        }
+        
+        .dg .c select {
+            margin-top: 2px;
+        }
+        
+        .dg .cr.function .property-name {
+            width: 100%;
+        }
+        
+        .dg li:not(.folder) {
+            height: 28px;
+            line-height: 28px;
+        }
+        
+        .dg li.title {
+            padding-left: 16px;
+            height: 30px;
+            line-height: 30px;
+        }
+        
+        .modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.7);
+            z-index: 1000;
+            align-items: center;
+            justify-content: center;
+        }
+        
+        .modal-content {
+            background-color: #252525;
+            padding: 20px;
+            border-radius: 8px;
+            width: 80%;
+            max-width: 800px;
+            max-height: 80vh;
+            overflow-y: auto;
+        }
+        
+        .modal-title {
+            margin-bottom: 15px;
+            color: var(--accent-color);
+        }
+        
+        pre, textarea {
+            background-color: #333;
+            padding: 10px;
+            border-radius: 4px;
+            font-family: monospace;
+            font-size: 0.9rem;
+            width: 100%;
+            color: white;
+        }
+        
+        pre {
+            white-space: pre-wrap;
+            max-height: 300px;
+            overflow-y: auto;
+        }
+        
+        textarea {
+            height: 300px;
+            border: 1px solid #444;
+            margin-top: 10px;
+        }
+        
+        .button-group {
+            display: flex;
+            gap: 8px;
+            margin-top: 15px;
+            justify-content: flex-end;
+        }
+    </style>
+</head>
+<body>
+    <div id="toolbar">
+        <div class="tile-selector">
+            <span>Tile:</span>
+            <div class="tile tile-wall selected" data-tile-type="0">W</div>
+            <div class="tile tile-floor" data-tile-type="1">F</div>
+            <div class="tile tile-safe" data-tile-type="2">S</div>
+            <div class="tile tile-teleporter" data-tile-type="3">T</div>
+        </div>
+        <div class="spacer"></div>
+        <button id="exportMapBtn">Export</button>
+        <button id="importMapBtn">Import</button>
+        <button id="clearMapBtn">Clear</button>
+    </div>
+    
+    <div class="canvas-container">
+        <canvas id="mapCanvas"></canvas>
+        <div id="zoomControls">
+            <button class="zoom-btn" id="zoomIn">+</button>
+            <button class="zoom-btn" id="zoomOut">-</button>
+        </div>
+    </div>
+
+    <div id="importExportModal" class="modal">
+        <div class="modal-content">
+            <h2 id="modalTitle" class="modal-title">Export Map</h2>
+            <pre id="jsonOutput"></pre>
+            <textarea id="jsonInput" style="display: none;"></textarea>
+            <div class="button-group">
+                <button id="copyJsonBtn">Copy to Clipboard</button>
+                <button id="loadJsonBtn" style="display: none;">Load Map</button>
+                <button id="closeModalBtn">Close</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="teleporterModal" class="modal">
+        <div class="modal-content" style="max-width: 400px;">
+            <h2 class="modal-title">Teleporter Code</h2>
+            <div style="margin-bottom: 15px;">
+                <label for="teleporterCode" style="display: block; margin-bottom: 5px;">Code</label>
+                <input type="text" id="teleporterCode" placeholder="map1_to_map2" style="width: 100%; padding: 8px; background: #333; color: white; border: 1px solid #444; border-radius: 4px;">
+            </div>
+            <div style="margin-bottom: 15px;">
+                <label for="teleporterMapId" style="display: block; margin-bottom: 5px;">Map ID</label>
+                <input type="text" id="teleporterMapId" placeholder="map1" style="width: 100%; padding: 8px; background: #333; color: white; border: 1px solid #444; border-radius: 4px;">
+            </div>
+            <div class="button-group">
+                <button id="saveTeleporterBtn">Save</button>
+                <button id="cancelTeleporterBtn">Cancel</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let mapData = {
+            width: 45,
+            height: 12,
+            tileSize: 80,
+            enemyConfig: {
+                count: 1,
+                radius: 15,
+                minSpeed: 5,
+                maxSpeed: 8,
+                spawnTileType: 1
+            },
+            teleporterCodes: [],
+            encodedMap: []
+        };
+        const canvas = document.getElementById('mapCanvas');
+        const ctx = canvas.getContext('2d');
+        let scale = 1;
+        let tiles = [];
+        let selectedTileType = 0;
+        let currentTeleporterIndex = -1;
+        let isDrawing = false;
+        const gui = new dat.GUI({ autoPlace: true, width: 350 });
+        gui.domElement.style.position = 'absolute';
+        gui.domElement.style.top = '50px';
+        gui.domElement.style.right = '10px';
+        const mapSettingsFolder = gui.addFolder('Map Settings');
+        const mapSettings = {
+            width: 45,
+            height: 12,
+            tileSize: 80,
+            updateMap: () => {
+                updateMapSettings();
+            }
+        };
+        
+        mapSettingsFolder.add(mapSettings, 'width', 5, 100, 1).name('Width (tiles)');
+        mapSettingsFolder.add(mapSettings, 'height', 5, 100, 1).name('Height (tiles)');
+        mapSettingsFolder.add(mapSettings, 'tileSize', 20, 200, 5).name('Tile Size (px)');
+        mapSettingsFolder.add(mapSettings, 'updateMap').name('Update Map');
+        mapSettingsFolder.open();
+        const enemyFolder = gui.addFolder('Enemy Configuration');
+        
+        enemyFolder.add(mapData.enemyConfig, 'count', 1, 20, 1).name('Count');
+        enemyFolder.add(mapData.enemyConfig, 'radius', 5, 30, 1).name('Radius');
+        enemyFolder.add(mapData.enemyConfig, 'minSpeed', 1, 20, 1).name('Min Speed');
+        enemyFolder.add(mapData.enemyConfig, 'maxSpeed', 1, 20, 1).name('Max Speed');
+        
+        const spawnTypeController = enemyFolder.add(mapData.enemyConfig, 'spawnTileType', { 'Floor': 1, 'Safe Zone': 2 }).name('Spawn Tile Type');
+        spawnTypeController.onChange(value => {
+            mapData.enemyConfig.spawnTileType = parseInt(value);
+        });
+        
+        enemyFolder.open();
+        const teleporterFolder = gui.addFolder('Teleporter Codes');
+        
+        const teleporterControls = {
+            addTeleporter: () => {
+                editTeleporter(-1);
+            },
+            teleporters: {} // Will be populated dynamically
+        };
+        
+        teleporterFolder.add(teleporterControls, 'addTeleporter').name('Add Teleporter Code');
+        
+        function updateTeleporterGUI() {
+            for (const key in teleporterControls.teleporters) {
+                if (teleporterFolder.__controllers) {
+                    const controller = teleporterFolder.__controllers.find(c => c.property === key);
+                    if (controller) {
+                        controller.remove();
+                    }
+                }
+                delete teleporterControls.teleporters[key];
+            }
+            mapData.teleporterCodes.forEach((teleporter, index) => {
+                const controlKey = `teleporter${index}`;
+                teleporterControls.teleporters[controlKey] = () => {
+                    editTeleporter(index);
+                };
+                teleporterFolder.add(teleporterControls.teleporters, controlKey).name(`${teleporter.code} → ${teleporter.mapId}`);
+            });
+        }
+        
+        teleporterFolder.open();
+        function initMap() {
+            mapData.width = mapSettings.width;
+            mapData.height = mapSettings.height;
+            mapData.tileSize = mapSettings.tileSize;
+            tiles = [];
+            for (let y = 0; y < mapData.height; y++) {
+                const row = [];
+                for (let x = 0; x < mapData.width; x++) {
+                    if (x === 0 || y === 0 || x === mapData.width - 1 || y === mapData.height - 1) {
+                        row.push(0); // Wall
+                    } else {
+                        row.push(1); // Floor
+                    }
+                }
+                tiles.push(row);
+            }
+            
+            resizeCanvas();
+            drawMap();
+        }
+        
+        function updateMapSettings() {
+            mapData.width = mapSettings.width;
+            mapData.height = mapSettings.height;
+            mapData.tileSize = mapSettings.tileSize;
+            initMap();
+        }
+        function resizeCanvas() {
+            canvas.width = mapData.width * mapData.tileSize * scale;
+            canvas.height = mapData.height * mapData.tileSize * scale;
+            drawMap();
+        }
+        function drawMap() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            
+            const tileSize = mapData.tileSize * scale;
+            for (let y = 0; y < mapData.height; y++) {
+                for (let x = 0; x < mapData.width; x++) {
+                    const tileType = tiles[y][x];
+                    drawTile(x * tileSize, y * tileSize, tileSize, tileType);
+                }
+            }
+            ctx.strokeStyle = '#444';
+            ctx.lineWidth = 1;
+            
+            for (let x = 0; x <= mapData.width; x++) {
+                ctx.beginPath();
+                ctx.moveTo(x * tileSize, 0);
+                ctx.lineTo(x * tileSize, canvas.height);
+                ctx.stroke();
+            }
+            
+            for (let y = 0; y <= mapData.height; y++) {
+                ctx.beginPath();
+                ctx.moveTo(0, y * tileSize);
+                ctx.lineTo(canvas.width, y * tileSize);
+                ctx.stroke();
+            }
+        }
+        function drawTile(x, y, size, type) {
+            switch(type) {
+                case 0: // Wall
+                    ctx.fillStyle = '#333';
+                    break;
+                case 1: // Floor
+                    ctx.fillStyle = '#666';
+                    break;
+                case 2: // Safe zone
+                    ctx.fillStyle = '#48c774';
+                    break;
+                case 3: // Teleporter
+                    ctx.fillStyle = '#9c59b6';
+                    break;
+                default:
+                    ctx.fillStyle = '#ff0000';
+            }
+            
+            ctx.fillRect(x, y, size, size);
+            ctx.fillStyle = '#fff';
+            ctx.font = `${Math.floor(size/3)}px Arial`;
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            
+            let text = '';
+            switch(type) {
+                case 0: text = 'W'; break;
+                case 1: text = 'F'; break;
+                case 2: text = 'S'; break;
+                case 3: text = 'T'; break;
+            }
+            
+            ctx.fillText(text, x + size/2, y + size/2);
+        }
+        function setTileAt(tileX, tileY) {
+            if (tileX >= 0 && tileX < mapData.width && tileY >= 0 && tileY < mapData.height) {
+                tiles[tileY][tileX] = selectedTileType;
+                drawMap();
+                return true;
+            }
+            return false;
+        }
+        function encodeMap() {
+            const encoded = [];
+            let currentValue = tiles[0][0];
+            let count = 0;
+            
+            for (let y = 0; y < mapData.height; y++) {
+                for (let x = 0; x < mapData.width; x++) {
+                    const value = tiles[y][x];
+                    
+                    if (value === currentValue) {
+                        count++;
+                    } else {
+                        encoded.push(currentValue, count);
+                        currentValue = value;
+                        count = 1;
+                    }
+                }
+            }
+            encoded.push(currentValue, count);
+            
+            return encoded;
+        }
+        function decodeMap(encoded) {
+            const map = [];
+            let rowIndex = 0;
+            let colIndex = 0;
+            
+            for (let i = 0; i < encoded.length; i += 2) {
+                const value = encoded[i];
+                const count = encoded[i + 1];
+                
+                if (!map[rowIndex]) {
+                    map[rowIndex] = [];
+                }
+                
+                for (let j = 0; j < count; j++) {
+                    map[rowIndex][colIndex] = value;
+                    colIndex++;
+                    
+                    if (colIndex >= mapData.width) {
+                        colIndex = 0;
+                        rowIndex++;
+                        if (rowIndex < mapData.height && !map[rowIndex]) {
+                            map[rowIndex] = [];
+                        }
+                    }
+                }
+            }
+            
+            return map;
+        }
+        function exportMap() {
+            mapData.encodedMap = encodeMap();
+            mapData.width = mapSettings.width;
+            mapData.height = mapSettings.height;
+            mapData.tileSize = mapSettings.tileSize;
+            
+            return JSON.stringify(mapData, null, 2);
+        }
+        function importMap(jsonData) {
+            try {
+                const data = JSON.parse(jsonData);
+                mapData = data;
+                mapSettings.width = mapData.width;
+                mapSettings.height = mapData.height;
+                mapSettings.tileSize = mapData.tileSize;
+                for (let i = 0; i < mapSettingsFolder.__controllers.length; i++) {
+                    mapSettingsFolder.__controllers[i].updateDisplay();
+                }
+                for (let i = 0; i < enemyFolder.__controllers.length; i++) {
+                    enemyFolder.__controllers[i].updateDisplay();
+                }
+                tiles = decodeMap(mapData.encodedMap);
+                updateTeleporterGUI();
+                resizeCanvas();
+                
+                return true;
+            } catch (error) {
+                alert('Error importing map: ' + error.message);
+                return false;
+            }
+        }
+        function editTeleporter(index) {
+            currentTeleporterIndex = index;
+            
+            if (index !== -1) {
+                const teleporter = mapData.teleporterCodes[index];
+                document.getElementById('teleporterCode').value = teleporter.code;
+                document.getElementById('teleporterMapId').value = teleporter.mapId;
+            } else {
+                document.getElementById('teleporterCode').value = '';
+                document.getElementById('teleporterMapId').value = '';
+            }
+            
+            document.getElementById('teleporterModal').style.display = 'flex';
+        }
+        function saveTeleporter() {
+            const code = document.getElementById('teleporterCode').value.trim();
+            const mapId = document.getElementById('teleporterMapId').value.trim();
+            
+            if (!code || !mapId) {
+                alert('Code and Map ID are required');
+                return;
+            }
+            
+            const teleporter = { code, mapId };
+            
+            if (currentTeleporterIndex === -1) {
+                mapData.teleporterCodes.push(teleporter);
+            } else {
+                mapData.teleporterCodes[currentTeleporterIndex] = teleporter;
+            }
+            updateTeleporterGUI();
+            
+            document.getElementById('teleporterModal').style.display = 'none';
+        }
+        window.addEventListener('DOMContentLoaded', () => {
+            initMap();
+            document.querySelectorAll('.tile').forEach(tile => {
+                tile.addEventListener('click', e => {
+                    document.querySelectorAll('.tile').forEach(t => t.classList.remove('selected'));
+                    e.target.classList.add('selected');
+                    selectedTileType = parseInt(e.target.dataset.tileType);
+                });
+            });
+            canvas.addEventListener('mousedown', e => {
+                isDrawing = true;
+                const rect = canvas.getBoundingClientRect();
+                const mouseX = e.clientX - rect.left;
+                const mouseY = e.clientY - rect.top;
+                
+                const tileX = Math.floor(mouseX / (mapData.tileSize * scale));
+                const tileY = Math.floor(mouseY / (mapData.tileSize * scale));
+                
+                setTileAt(tileX, tileY);
+            });
+            
+            canvas.addEventListener('mousemove', e => {
+                if (!isDrawing) return;
+                
+                const rect = canvas.getBoundingClientRect();
+                const mouseX = e.clientX - rect.left;
+                const mouseY = e.clientY - rect.top;
+                
+                const tileX = Math.floor(mouseX / (mapData.tileSize * scale));
+                const tileY = Math.floor(mouseY / (mapData.tileSize * scale));
+                
+                setTileAt(tileX, tileY);
+            });
+            
+            canvas.addEventListener('mouseup', () => {
+                isDrawing = false;
+            });
+            
+            canvas.addEventListener('mouseleave', () => {
+                isDrawing = false;
+            });
+            document.getElementById('zoomIn').addEventListener('click', () => {
+                scale = Math.min(scale + 0.1, 3);
+                resizeCanvas();
+            });
+            
+            document.getElementById('zoomOut').addEventListener('click', () => {
+                scale = Math.max(scale - 0.1, 0.2);
+                resizeCanvas();
+            });
+            canvas.addEventListener('wheel', (e) => {
+                e.preventDefault();
+                const delta = Math.sign(e.deltaY);
+                if (delta < 0) {
+                    scale = Math.min(scale + 0.1, 3);
+                } else {
+                    scale = Math.max(scale - 0.1, 0.2);
+                }
+                
+                resizeCanvas();
+            }, { passive: false });
+            document.getElementById('exportMapBtn').addEventListener('click', () => {
+                const jsonOutput = document.getElementById('jsonOutput');
+                jsonOutput.textContent = exportMap();
+                
+                document.getElementById('modalTitle').textContent = 'Export Map';
+                document.getElementById('jsonOutput').style.display = 'block';
+                document.getElementById('jsonInput').style.display = 'none';
+                document.getElementById('copyJsonBtn').style.display = 'inline-block';
+                document.getElementById('loadJsonBtn').style.display = 'none';
+                
+                document.getElementById('importExportModal').style.display = 'flex';
+            });
+            document.getElementById('importMapBtn').addEventListener('click', () => {
+                document.getElementById('modalTitle').textContent = 'Import Map';
+                document.getElementById('jsonOutput').style.display = 'none';
+                document.getElementById('jsonInput').style.display = 'block';
+                document.getElementById('copyJsonBtn').style.display = 'none';
+                document.getElementById('loadJsonBtn').style.display = 'inline-block';
+                
+                document.getElementById('importExportModal').style.display = 'flex';
+            });
+            document.getElementById('copyJsonBtn').addEventListener('click', () => {
+                const jsonOutput = document.getElementById('jsonOutput');
+                navigator.clipboard.writeText(jsonOutput.textContent)
+                    .then(() => {
+                        alert('JSON copied to clipboard');
+                    })
+                    .catch(err => {
+                        console.error('Failed to copy: ', err);
+                    });
+            });
+            document.getElementById('loadJsonBtn').addEventListener('click', () => {
+                const jsonInput = document.getElementById('jsonInput');
+                if (importMap(jsonInput.value)) {
+                    document.getElementById('importExportModal').style.display = 'none';
+                }
+            });
+            document.getElementById('closeModalBtn').addEventListener('click', () => {
+                document.getElementById('importExportModal').style.display = 'none';
+            });
+            document.getElementById('saveTeleporterBtn').addEventListener('click', saveTeleporter);
+            document.getElementById('cancelTeleporterBtn').addEventListener('click', () => {
+                document.getElementById('teleporterModal').style.display = 'none';
+            });
+            document.getElementById('clearMapBtn').addEventListener('click', () => {
+                if (confirm('Are you sure you want to clear the map?')) {
+                    initMap();
+                }
+            });
+            window.addEventListener('resize', () => {
+                resizeCanvas();
+            });
+        });
+    </script>
+</body>
+</html> 
