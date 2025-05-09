@@ -10,13 +10,16 @@ class Game {
     this.ctx = this.canvas.getContext('2d');
     window.game = this; 
     this.resize();
-    window.addEventListener('resize', () => this.resize());
+    this.resizeHandler = () => this.resize();
+    window.addEventListener('resize', this.resizeHandler);
     
     this.players = new Map();
     this.enemies = new Map();
     this.bullets = new Map();
-    this.previousEnemies = new Map();
-    this.previousBullets = new Map();
+
+    this.inactiveEnemies = new Set();
+    this.inactiveBullets = new Set();
+    
     this.enemyTypes = {};
     this.playerId = null;
     this.map = null;
@@ -39,6 +42,8 @@ class Game {
     
     this.lastUpdateTime = Date.now();
     this.deltaTime = 0;
+
+    this.maxChatMessages = 100;
     
     this.setupEventListeners();
     this.setupChat();
@@ -111,6 +116,10 @@ class Game {
     messageElement.textContent = `${sender}: ${message}`;
     chatWindow.appendChild(messageElement);
     chatWindow.scrollTop = chatWindow.scrollHeight;
+
+    while (chatWindow.children.length > this.maxChatMessages) {
+      chatWindow.removeChild(chatWindow.firstChild);
+    }
   }
   
   setupEventListeners() {
@@ -125,8 +134,6 @@ class Game {
       this.players.clear();
       this.enemies.clear();
       this.bullets.clear();
-      this.previousEnemies.clear();
-      this.previousBullets.clear();
 
       if (data.playerData) {
           this.players.set(data.playerData.id, data.playerData);
@@ -163,8 +170,6 @@ class Game {
       this.players.clear();
       this.enemies.clear();
       this.bullets.clear();
-      this.previousEnemies.clear();
-      this.previousBullets.clear();
 
       if (data.playerData && data.playerData.id === this.playerId) {
         this.players.set(data.playerData.id, data.playerData);
@@ -212,20 +217,29 @@ class Game {
       });
       
       if (data.enemies) {
-        this.previousEnemies = new Map(this.enemies);
+        this.inactiveEnemies = new Set(this.enemies.keys());
         
         data.enemies.forEach(enemyData => {
           this.addEnemy(enemyData);
+          this.inactiveEnemies.delete(enemyData.id);
         });
+
+        for (const enemyId of this.inactiveEnemies) {
+          this.enemies.delete(enemyId);
+        }
       }
       
       if (data.bullets) {
-        this.previousBullets = new Map(this.bullets);
-        this.bullets.clear();
+        this.inactiveBullets = new Set(this.bullets.keys());
         
         data.bullets.forEach(bulletData => {
           this.addBullet(bulletData);
+          this.inactiveBullets.delete(bulletData.id);
         });
+
+        for (const bulletId of this.inactiveBullets) {
+          this.bullets.delete(bulletId);
+        }
       }
 
       if (this.players.size > 0 && this.playerId) {
@@ -275,20 +289,25 @@ class Game {
       });
       
       if (data.enemies) {
-        this.previousEnemies = new Map(this.enemies);
+        this.inactiveEnemies = new Set(this.enemies.keys());
         
         data.enemies.forEach(enemyData => {
           this.addEnemy(enemyData);
+          this.inactiveEnemies.delete(enemyData.id);
         });
+
+        for (const enemyId of this.inactiveEnemies) {
+          this.enemies.delete(enemyId);
+        }
       }
       
       if (data.b) {
-        this.previousBullets = new Map(this.bullets);
-        this.bullets.clear();
+
+        this.inactiveBullets = new Set(this.bullets.keys());
         
         data.b.forEach(bulletInfo => {
           const id = bulletInfo[0];
-          const bullet = {
+          const bullet = this.bullets.get(id) || {
             id: id,
             x: bulletInfo[1],
             y: bulletInfo[2],
@@ -296,8 +315,20 @@ class Game {
             color: '#FFFF00',
             outlineColor: '#FF8C00'
           };
+          
+          bullet.prevX = bullet.x;
+          bullet.prevY = bullet.y;
+          bullet.x = bulletInfo[1];
+          bullet.y = bulletInfo[2];
+          bullet.radius = bulletInfo[3];
+          
           this.bullets.set(id, bullet);
+          this.inactiveBullets.delete(id);
         });
+
+        for (const bulletId of this.inactiveBullets) {
+          this.bullets.delete(bulletId);
+        }
       }
     });
     
@@ -373,8 +404,8 @@ class Game {
         this.renderer.renderPlayers(this.players, this.camera);
         
         const lerpAmount = Math.min(1, this.deltaTime / 100);
-        this.renderer.renderEnemies(this.enemies, this.previousEnemies, lerpAmount, this.camera);
-        this.renderer.renderBullets(this.bullets, this.previousBullets, lerpAmount, this.camera);
+        this.renderer.renderEnemies(this.enemies, this.enemies, lerpAmount, this.camera);
+        this.renderer.renderBullets(this.bullets, this.bullets, lerpAmount, this.camera);
       } else {
       }
     } else {
@@ -385,11 +416,44 @@ class Game {
     }
   }
   
+  dispose() {
+    if (this.gameLoopRequestId) {
+      cancelAnimationFrame(this.gameLoopRequestId);
+      this.gameLoopRequestId = null;
+    }
+
+    if (this.input) {
+      this.input.cleanup();
+      this.input = null;
+    }
+
+    if (this.network && this.network.socket) {
+      this.network.socket.close();
+      this.network = null;
+    }
+
+    window.removeEventListener('resize', this.resizeHandler);
+
+    this.players.clear();
+    this.enemies.clear();
+    this.bullets.clear();
+    this.inactiveEnemies.clear();
+    this.inactiveBullets.clear();
+
+    this.canvas = null;
+    this.ctx = null;
+
+    if (window.game === this) {
+      window.game = null;
+    }
+    
+    console.log('Game disposed');
+  }
+  
   gameLoop() {
     this.update();
     this.render();
-    requestAnimationFrame(() => this.gameLoop());
-    
+    this.gameLoopRequestId = requestAnimationFrame(() => this.gameLoop());
   }
   
   startGameLoop() {
@@ -398,22 +462,52 @@ class Game {
   
   addEnemy(enemyData) {
     const typeInfo = this.enemyTypes[enemyData.type] || { color: '#808080', outlineColor: '#000000' };
+
+    const existingEnemy = this.enemies.get(enemyData.id);
     
-    const enemy = {
-      ...enemyData,
-      color: typeInfo.color,
-      outlineColor: typeInfo.outlineColor
-    };
-    
-    this.enemies.set(enemyData.id, enemy);
+    if (existingEnemy) {
+      existingEnemy.prevX = existingEnemy.x;
+      existingEnemy.prevY = existingEnemy.y;
+
+      existingEnemy.x = enemyData.x;
+      existingEnemy.y = enemyData.y;
+      existingEnemy.radius = enemyData.radius;
+      existingEnemy.type = enemyData.type;
+    } else {
+      const enemy = {
+        ...enemyData,
+        prevX: enemyData.x,
+        prevY: enemyData.y,
+        color: typeInfo.color,
+        outlineColor: typeInfo.outlineColor
+      };
+      
+      this.enemies.set(enemyData.id, enemy);
+    }
   }
   
   addBullet(bulletData) {
-    const bullet = {
-      ...bulletData
-    };
+    const existingBullet = this.bullets.get(bulletData.id);
     
-    this.bullets.set(bulletData.id, bullet);
+    if (existingBullet) {
+      existingBullet.prevX = existingBullet.x;
+      existingBullet.prevY = existingBullet.y;
+
+      existingBullet.x = bulletData.x;
+      existingBullet.y = bulletData.y;
+      existingBullet.radius = bulletData.radius;
+      existingBullet.isActive = bulletData.isActive;
+    } else {
+      const bullet = {
+        ...bulletData,
+        prevX: bulletData.x,
+        prevY: bulletData.y,
+        color: bulletData.color || '#FFFF00',
+        outlineColor: bulletData.outlineColor || '#FF8C00'
+      };
+      
+      this.bullets.set(bulletData.id, bullet);
+    }
   }
 }
 

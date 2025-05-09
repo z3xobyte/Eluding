@@ -32,49 +32,76 @@ export class Input {
     this.previousPos = { x: 0, y: 0 };
     this.oldPos = { x: 0, y: 0 };
     this.slippery = false;
+
+    this._eventHandlers = {
+      mousemove: e => this.handleMouseMove(e),
+      click: () => this.handleClick(),
+      keydown: e => this.handleKeyDown(e),
+      keyup: e => this.handleKeyUp(e)
+    };
     
     this.setupEventListeners();
     this.startContinuousUpdates();
   }
   
   setupEventListeners() {
-    this.canvas.addEventListener('mousemove', e => {
-      const rect = this.canvas.getBoundingClientRect();
-      this.mouseX = e.clientX - rect.left;
-      this.mouseY = e.clientY - rect.top;
-      
-      if (this.isMovementEnabled) {
-        this.handleMouseMovement();
-      }
-    });
+    this.canvas.addEventListener('mousemove', this._eventHandlers.mousemove);
+    this.canvas.addEventListener('click', this._eventHandlers.click);
+    document.addEventListener('keydown', this._eventHandlers.keydown);
+    document.addEventListener('keyup', this._eventHandlers.keyup);
+  }
+  
+  cleanup() {
+
+    if (this.updateInterval) {
+      clearInterval(this.updateInterval);
+      this.updateInterval = null;
+    }
+
+    this.canvas.removeEventListener('mousemove', this._eventHandlers.mousemove);
+    this.canvas.removeEventListener('click', this._eventHandlers.click);
+    document.removeEventListener('keydown', this._eventHandlers.keydown);
+    document.removeEventListener('keyup', this._eventHandlers.keyup);
+
+    this.events = {};
+  }
+  
+  handleMouseMove(e) {
+    const rect = this.canvas.getBoundingClientRect();
+    this.mouseX = e.clientX - rect.left;
+    this.mouseY = e.clientY - rect.top;
     
-    this.canvas.addEventListener('click', () => {
-      this.isMovementEnabled = !this.isMovementEnabled;
-      
-      this.emit('movementtoggled', this.isMovementEnabled);
-      
-      if (this.isMovementEnabled) {
-        this.handleMouseMovement();
-      } else {
-        this.emitMouseMove(this.lastEmittedX, this.lastEmittedY);
-      }
-    });
-
-    document.addEventListener('keydown', e => {
-      if (e.keyCode === 13) {
-        return;
-      }
-      this.keys[e.keyCode] = true;
-      this.handleKeyboardMovement();
-    });
-
-    document.addEventListener('keyup', e => {
-      if (e.keyCode === 13) {
-        return;
-      }
-      this.keys[e.keyCode] = false;
-      this.handleKeyboardMovement();
-    });
+    if (this.isMovementEnabled) {
+      this.handleMouseMovement();
+    }
+  }
+  
+  handleClick() {
+    this.isMovementEnabled = !this.isMovementEnabled;
+    
+    this.emit('movementtoggled', this.isMovementEnabled);
+    
+    if (this.isMovementEnabled) {
+      this.handleMouseMovement();
+    } else {
+      this.emitMouseMove(this.lastEmittedX, this.lastEmittedY);
+    }
+  }
+  
+  handleKeyDown(e) {
+    if (e.keyCode === 13) {
+      return;
+    }
+    this.keys[e.keyCode] = true;
+    this.handleKeyboardMovement();
+  }
+  
+  handleKeyUp(e) {
+    if (e.keyCode === 13) {
+      return;
+    }
+    this.keys[e.keyCode] = false;
+    this.handleKeyboardMovement();
   }
 
   handleMouseMovement() {
@@ -193,7 +220,7 @@ export class Input {
   }
   
   update(time) {
-    const timeFix = time / (1000 / 30);
+    const timeFix = time / (1000 / 60);
     
     this.oldPos = (this.previousPos.x === this.mouseX && this.previousPos.y === this.mouseY) 
       ? this.oldPos 
@@ -202,7 +229,7 @@ export class Input {
     this.previousPos = { x: this.mouseX, y: this.mouseY };
     
     if (!this.slippery) {
-      const frictionTimeFix = time / (1000 / 30);
+      const frictionTimeFix = time / (1000 / 60);
       const friction_factor = 1 - (this.friction * frictionTimeFix);
       
       this.slide_x = this.distance_moved_previously[0];
@@ -261,6 +288,12 @@ export class Input {
     }
     
     this.events[event].push(callback);
+
+    return () => {
+      if (this.events[event]) {
+        this.events[event] = this.events[event].filter(cb => cb !== callback);
+      }
+    };
   }
   
   emit(event, ...args) {

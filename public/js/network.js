@@ -15,48 +15,91 @@ export class Network {
     this.enemyIdMap = new Map();
     this.bulletIdMap = new Map();
     
+    this._socketEventHandlers = {
+      open: this._handleOpen.bind(this),
+      close: this._handleClose.bind(this),
+      error: this._handleError.bind(this),
+      message: this._handleMessage.bind(this)
+    };
+    
     this.connect();
   }
   
   connect() {
+    if (this.socket && this.socket.readyState !== WebSocket.CLOSED) {
+      console.log('Socket already exists and is not closed, not reconnecting');
+      return;
+    }
+    
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
     const host = window.location.host;
     this.socket = new WebSocket(`${protocol}//${host}`);
     this.socket.binaryType = 'arraybuffer';
-    
-    this.socket.onopen = () => {
-      console.log('Connected to server');
-      this.startPingInterval();
-    };
-    
-    this.socket.onclose = () => {
-      console.log('Disconnected from server');
-      this.clearPingInterval();
-      setTimeout(() => this.connect(), 1000);
-    };
-    
-    this.socket.onerror = (error) => {
-      console.error('WebSocket error:', error);
-    };
-    
-    this.socket.onmessage = async (event) => {
-      try {
-        let message;
-        
-        if (event.data instanceof ArrayBuffer) {
-          const compressedData = new Uint8Array(event.data);
-          const decompressedData = await CompressionUtils.decompressGzip(compressedData);
-          const text = new TextDecoder().decode(decompressedData);
-          message = JSON.parse(text);
-        } else {
-          message = JSON.parse(event.data);
-        }
-        
-        this.handleMessage(message);
-      } catch (e) {
-        console.error('Failed to parse message:', e);
+ 
+    this.socket.onopen = this._socketEventHandlers.open;
+    this.socket.onclose = this._socketEventHandlers.close;
+    this.socket.onerror = this._socketEventHandlers.error;
+    this.socket.onmessage = this._socketEventHandlers.message;
+  }
+  
+  disconnect() {
+    this.clearPingInterval();
+
+    if (this.socket) {
+      this.socket.onopen = null;
+      this.socket.onclose = null;
+      this.socket.onerror = null;
+      this.socket.onmessage = null;
+      
+      if (this.socket.readyState === WebSocket.OPEN || 
+          this.socket.readyState === WebSocket.CONNECTING) {
+        this.socket.close();
       }
-    };
+      
+      this.socket = null;
+    }
+
+    this.playerIdMap.clear();
+    this.enemyIdMap.clear();
+    this.bulletIdMap.clear();
+
+    this.events = {};
+    
+    console.log('Network connection disposed');
+  }
+  
+  _handleOpen() {
+    console.log('Connected to server');
+    this.startPingInterval();
+  }
+  
+  _handleClose() {
+    console.log('Disconnected from server');
+    this.clearPingInterval();
+    setTimeout(() => this.connect(), 1000);
+  }
+  
+  _handleError(error) {
+    console.error('WebSocket error:', error);
+  }
+  
+  async _handleMessage(event) {
+    try {
+      let message;
+      
+      if (event.data instanceof ArrayBuffer) {
+        const compressedData = new Uint8Array(event.data);
+        const decompressedData = await CompressionUtils.decompressGzip(compressedData);
+        const text = new TextDecoder().decode(decompressedData);
+        message = JSON.parse(text);
+      } else {
+        message = JSON.parse(event.data);
+      }
+      
+      this.handleMessage(message);
+    } catch (e) {
+      console.error('Failed to parse message:', e);
+    }
   }
   
   handleMessage(message) {

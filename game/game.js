@@ -21,9 +21,13 @@ class Game {
     this._bulletIdCounter = 1;
     this._idMapNeedsUpdate = true;
     this._updateCounter = 0;
+    this._unusedMapTimeout = 300;
+    this._mapLastAccessed = new Map();
   }
   
   async loadMapIfNeeded(mapId) {
+    this._mapLastAccessed.set(mapId, Date.now());
+    
     if (!this.mapGrids.has(mapId) || !this.mapEnemies.has(mapId)) {
       const map = this.mapManager.getMapById(mapId);
       if (!map) {
@@ -58,12 +62,10 @@ class Game {
     const { spawnTileType, types } = map.enemyConfig;
     let totalEnemiesSpawned = 0;
 
-    // Process each enemy type
     for (const [type, config] of Object.entries(types)) {
       const { count, radius, minSpeed, maxSpeed } = config;
       
       if (type === "basic") {
-        // Spawn basic enemies
         for (let i = 0; i < count; i++) {
           const spawnPos = map.getValidSpawnPosition(spawnTileType, radius, grid);
           if (!spawnPos) continue;
@@ -144,10 +146,18 @@ class Game {
     const currentTime = Date.now();
     this.lastUpdateTime = currentTime;
     
+    if (this._updateCounter % 1800 === 0) {
+      this.cleanupUnusedMaps();
+    }
+    
     for (const [playerId, player] of this.players) {
       const mapId = player.currentMapId;
       const map = this.mapManager.getMapById(mapId);
       const grid = this.mapGrids.get(mapId);
+
+      if (mapId) {
+        this._mapLastAccessed.set(mapId, currentTime);
+      }
 
       if (!map || !grid) {
         console.warn(`Player ${playerId} on unloaded map ${mapId}. Skipping update.`);
@@ -188,6 +198,12 @@ class Game {
     this.checkCollisions();
     
     this.broadcastGameState();
+    
+    this._updateCounter++;
+
+    if (this._updateCounter % 1000 === 0) {
+      this.cleanupCachedIds();
+    }
   }
   
   checkCollisions() {
@@ -209,61 +225,71 @@ class Game {
 
       for (const player of playersOnThisMap) {
         if (player.isDead) continue;
-        
+
         const queryRadius = player.radius + 30;
-        const nearbyEnemyIds = grid.queryArea(player.x, player.y, queryRadius);
+        const nearbyEntities = grid.queryArea(player.x, player.y, queryRadius);
+        let wasHit = false;
 
-        for (const enemyId of nearbyEnemyIds) {
-          const enemy = enemiesOnThisMap.get(enemyId);
+        for (const entityId of nearbyEntities) {
+          const enemy = enemiesOnThisMap.get(entityId);
           if (!enemy) continue;
-
+          
           const dx = player.x - enemy.x;
           const dy = player.y - enemy.y;
-          const rSum = player.radius + enemy.radius;
-
-          if (dx * dx + dy * dy < rSum * rSum) {
+          const distSquared = dx * dx + dy * dy;
+          const radiusSum = player.radius + enemy.radius;
+          
+          if (distSquared < radiusSum * radiusSum) {
             player.hitByEnemy();
+            wasHit = true;
             break;
           }
         }
         
-        // Check bullet collisions
-        if (!player.isDead) {
-          const nearbyBulletIds = grid.queryArea(player.x, player.y, queryRadius);
-          
-          for (const bulletId of nearbyBulletIds) {
-            const bullet = bulletsOnThisMap.get(bulletId);
+        if (!wasHit) {
+          for (const entityId of nearbyEntities) {
+            const bullet = bulletsOnThisMap.get(entityId);
             if (!bullet || !bullet.isActive) continue;
             
             const dx = player.x - bullet.x;
             const dy = player.y - bullet.y;
-            const rSum = player.radius + bullet.radius;
-
-            if (dx * dx + dy * dy < rSum * rSum) {
-              player.hitByEnemy(); // Reuse same method as enemy collision
-              bullet.isActive = false; // Deactivate bullet after hit
+            const distSquared = dx * dx + dy * dy;
+            const radiusSum = player.radius + bullet.radius;
+            
+            if (distSquared < radiusSum * radiusSum) {
+              player.hitByEnemy();
+              bullet.isActive = false;
               break;
             }
           }
         }
       }
-
-      const len = playersOnThisMap.length;
-      for (let i = 0; i < len; i++) {
-        const p1 = playersOnThisMap[i];
-        if (p1.isDead) continue;
-
-        for (let j = 0; j < len; j++) {
-          if (i === j) continue;
-          const p2 = playersOnThisMap[j];
-          if (!p2.isDead) continue;
-
-          const dx = p1.x - p2.x;
-          const dy = p1.y - p2.y;
-          const rSum = p1.radius + p2.radius;
-
-          if (dx * dx + dy * dy < rSum * rSum) {
-            p2.reviveByPlayer();
+      
+      const alivePlayers = [];
+      const deadPlayers = [];
+      
+      for (const player of playersOnThisMap) {
+        if (player.isDead) {
+          deadPlayers.push(player);
+        } else {
+          alivePlayers.push(player);
+        }
+      }
+      
+      if (deadPlayers.length > 0 && alivePlayers.length > 0) {
+        for (const deadPlayer of deadPlayers) {
+          const nearbyEntities = grid.queryArea(deadPlayer.x, deadPlayer.y, deadPlayer.radius * 2);
+          
+          for (const alivePlayer of alivePlayers) {
+            const dx = deadPlayer.x - alivePlayer.x;
+            const dy = deadPlayer.y - alivePlayer.y;
+            const distSquared = dx * dx + dy * dy;
+            const radiusSum = deadPlayer.radius + alivePlayer.radius;
+            
+            if (distSquared < radiusSum * radiusSum) {
+              deadPlayer.reviveByPlayer();
+              break;
+            }
           }
         }
       }
@@ -493,6 +519,76 @@ class Game {
         if (connection.readyState === 1) {
           connection.send(compressed);
         }
+      }
+    }
+  }
+
+  cleanupUnusedMaps() {
+    const currentTime = Date.now();
+    const activeMapIds = new Set();
+    
+    for (const player of this.players.values()) {
+      if (player.currentMapId) {
+        activeMapIds.add(player.currentMapId);
+      }
+    }
+    
+    for (const [mapId, lastAccessed] of this._mapLastAccessed.entries()) {
+      if (activeMapIds.has(mapId)) continue;
+      
+      const secondsSinceLastAccess = (currentTime - lastAccessed) / 1000;
+      if (secondsSinceLastAccess > this._unusedMapTimeout) {
+        console.log(`Cleaning up unused map: ${mapId} (unused for ${Math.floor(secondsSinceLastAccess)} seconds)`);
+        
+        if (this.mapGrids.has(mapId)) {
+          const grid = this.mapGrids.get(mapId);
+          grid.clear();
+          this.mapGrids.delete(mapId);
+        }
+        
+        if (this.mapEnemies.has(mapId)) {
+          this.mapEnemies.delete(mapId);
+        }
+        
+        if (this.mapBullets.has(mapId)) {
+          this.mapBullets.delete(mapId);
+        }
+        
+        this._mapLastAccessed.delete(mapId);
+      }
+    }
+  }
+
+  cleanupCachedIds() {
+    for (const [id, shortId] of this._cachedPlayerIds.entries()) {
+      if (!this.players.has(id)) {
+        this._cachedPlayerIds.delete(id);
+      }
+    }
+    
+    const activeEnemyIds = new Set();
+    for (const enemiesMap of this.mapEnemies.values()) {
+      for (const enemyId of enemiesMap.keys()) {
+        activeEnemyIds.add(enemyId);
+      }
+    }
+    
+    for (const [id] of this._cachedEnemyIds.entries()) {
+      if (!activeEnemyIds.has(id)) {
+        this._cachedEnemyIds.delete(id);
+      }
+    }
+    
+    const activeBulletIds = new Set();
+    for (const bulletsMap of this.mapBullets.values()) {
+      for (const bulletId of bulletsMap.keys()) {
+        activeBulletIds.add(bulletId);
+      }
+    }
+    
+    for (const [id] of this._cachedBulletIds.entries()) {
+      if (!activeBulletIds.has(id)) {
+        this._cachedBulletIds.delete(id);
       }
     }
   }
