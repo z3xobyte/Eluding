@@ -10,19 +10,57 @@ export class Renderer {
     this.arrowSize = 20;
     this.gridSubdivisions = 2;
 
+    this.setCanvasDimensions();
+
+    window.addEventListener('resize', this.handleResize.bind(this));
+
     this.enableHardwareAcceleration(this.ctx);
     this.enableHardwareAcceleration(this.offscreenCtx);
 
     this.spatialGrid = new Map();
     this.cellSize = 256;
   }
-  
+
+  handleResize() {
+    if (this.resizeTimeout) {
+      clearTimeout(this.resizeTimeout);
+    }
+    
+    this.resizeTimeout = setTimeout(() => {
+      this.setCanvasDimensions();
+      this.dirtyCache = true;
+    }, 100);
+  }
+
+  setCanvasDimensions() {
+    if (this.ctx.canvas.parentElement) {
+      const parent = this.ctx.canvas.parentElement;
+      const styles = window.getComputedStyle(parent);
+      const width = parseInt(styles.width, 10);
+      const height = parseInt(styles.height, 10);
+
+      this.ctx.canvas.width = width;
+      this.ctx.canvas.height = height;
+      this.offscreenCanvas.width = width;
+      this.offscreenCanvas.height = height;
+    }
+  }
+
   enableHardwareAcceleration(context) {
     context.imageSmoothingEnabled = false;
 
     if (context === this.ctx) {
       context.canvas.style.transform = "translateZ(0)";
       context.canvas.style.backfaceVisibility = "hidden";
+      context.canvas.style.position = "absolute";
+      context.canvas.style.width = "100%";
+      context.canvas.style.height = "100%";
+
+      if (!context.canvas.parentElement || 
+          window.getComputedStyle(context.canvas.parentElement).position === 'static') {
+        context.canvas.style.top = "0";
+        context.canvas.style.left = "0";
+      }
     }
   }
 
@@ -83,12 +121,6 @@ export class Renderer {
   }
 
   renderMap(map, mapWidth, mapHeight, tileSize, camera) {
-    if (this.offscreenCanvas.width !== this.ctx.canvas.width ||
-        this.offscreenCanvas.height !== this.ctx.canvas.height) {
-      this.offscreenCanvas.width = this.ctx.canvas.width;
-      this.offscreenCanvas.height = this.ctx.canvas.height;
-      this.dirtyCache = true;
-    }
 
     const cameraChanged =
       this.lastCamera.x !== camera.x ||
