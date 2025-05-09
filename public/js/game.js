@@ -43,6 +43,12 @@ class Game {
     this.lastUpdateTime = Date.now();
     this.deltaTime = 0;
 
+    // FPS tracking
+    this.fpsDisplay = document.getElementById('fpsDisplay');
+    this.frameCount = 0;
+    this.lastFpsUpdate = Date.now();
+    this.fps = 0;
+
     this.maxChatMessages = 100;
     
     this.setupEventListeners();
@@ -387,6 +393,14 @@ class Game {
     const currentTime = Date.now();
     this.deltaTime = currentTime - this.lastUpdateTime;
     this.lastUpdateTime = currentTime;
+    
+    this.frameCount++;
+    if (currentTime - this.lastFpsUpdate >= 1000) {
+      this.fps = this.frameCount;
+      this.fpsDisplay.textContent = `FPS: ${this.fps}`;
+      this.frameCount = 0;
+      this.lastFpsUpdate = currentTime;
+    }
     
     const player = this.players.get(this.playerId);
     if (player) {

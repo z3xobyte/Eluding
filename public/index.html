@@ -19,17 +19,21 @@
       display: block;
       background-color: #333;
     }
-    #pingDisplay {
+    #indicators {
       position: fixed;
-      bottom: 10px;
+      top: 10px;
       right: 10px;
+      display: flex;
+      gap: 10px;
+      z-index: 1000;
+    }
+    #pingDisplay, #fpsDisplay {
       color: white;
       font-family: 'Courier New', monospace;
       font-size: 14px;
       background-color: rgba(0, 0, 0, 0.5);
       padding: 5px 10px;
       border-radius: 3px;
-      z-index: 1000;
     }
     #chat {
       width: 350px;
@@ -61,7 +65,10 @@
 </head>
 <body>
   <canvas id="gameCanvas"></canvas>
-  <div id="pingDisplay">Ping: -- ms</div>
+  <div id="indicators">
+    <div id="fpsDisplay">FPS: --</div>
+    <div id="pingDisplay">Ping: -- ms</div>
+  </div>
   <div id="chat">
     <div id="chat-window"></div>
     <input type="text" id="chat-input" placeholder="Press enter to chat" style="font-size: 18px;">
