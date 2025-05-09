@@ -15,6 +15,15 @@ export class Network {
     this.enemyIdMap = new Map();
     this.bulletIdMap = new Map();
     
+    this._ownPlayerId = null;
+    this._idMapNeedsUpdate = false;
+
+    this.textEncoder = new TextEncoder();
+    this.reconnectAttempts = 0;
+    this.maxReconnectDelay = 30000;
+    this.baseReconnectDelay = 1000;
+    this.minSendDistanceSq = 1; 
+
     this._socketEventHandlers = {
       open: this._handleOpen.bind(this),
       close: this._handleClose.bind(this),
@@ -26,14 +35,19 @@ export class Network {
   }
   
   connect() {
-    if (this.socket && this.socket.readyState !== WebSocket.CLOSED) {
-      console.log('Socket already exists and is not closed, not reconnecting');
+    if (this.socket && this.socket.readyState !== WebSocket.CLOSED && this.socket.readyState !== WebSocket.CLOSING) {
       return;
     }
     
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
     const host = window.location.host;
-    this.socket = new WebSocket(`${protocol}//${host}`);
+    try {
+        this.socket = new WebSocket(`${protocol}//${host}`);
+    } catch (e) {
+        console.error("Failed to create WebSocket:", e);
+        this._handleClose(); 
+        return;
+    }
     this.socket.binaryType = 'arraybuffer';
  
     this.socket.onopen = this._socketEventHandlers.open;
@@ -55,28 +69,36 @@ export class Network {
           this.socket.readyState === WebSocket.CONNECTING) {
         this.socket.close();
       }
-      
       this.socket = null;
     }
 
     this.playerIdMap.clear();
     this.enemyIdMap.clear();
     this.bulletIdMap.clear();
-
     this.events = {};
-    
-    console.log('Network connection disposed');
   }
   
   _handleOpen() {
-    console.log('Connected to server');
+    this.reconnectAttempts = 0;
     this.startPingInterval();
+    if (this._idMapNeedsUpdate || this.playerIdMap.size === 0) {
+        this.send({ type: 'requestIdMap' });
+    }
   }
   
   _handleClose() {
-    console.log('Disconnected from server');
     this.clearPingInterval();
-    setTimeout(() => this.connect(), 1000);
+    if (this.socket) {
+        this.socket.onopen = null;
+        this.socket.onclose = null;
+        this.socket.onerror = null;
+        this.socket.onmessage = null;
+        this.socket = null; 
+    }
+
+    const delay = Math.min(this.maxReconnectDelay, this.baseReconnectDelay * (2 ** this.reconnectAttempts));
+    setTimeout(() => this.connect(), delay);
+    this.reconnectAttempts++;
   }
   
   _handleError(error) {
@@ -92,129 +114,110 @@ export class Network {
         const decompressedData = await CompressionUtils.decompressGzip(compressedData);
         const text = new TextDecoder().decode(decompressedData);
         message = JSON.parse(text);
-      } else {
+      } else if (typeof event.data === 'string') {
         message = JSON.parse(event.data);
+      } else {
+        return;
       }
       
       this.handleMessage(message);
     } catch (e) {
-      console.error('Failed to parse message:', e);
+      console.error('Failed to parse or handle message:', e, event.data);
     }
   }
   
   handleMessage(message) {
-    if (message.type === 'init') {
-      console.log('Received init message with ID:', message.id);
-      this._ownPlayerId = message.id;
+    if (!message || (typeof message.type !== 'string' && typeof message.t !== 'string')) {
+        return;
+    }
+
+    const messageType = message.type || message.t;
+
+    switch (messageType) {
+      case 'init':
+        this._ownPlayerId = message.id;
+        this._idMapNeedsUpdate = true;
+        this.playerIdMap.clear();
+        this.enemyIdMap.clear();
+        this.bulletIdMap.clear();
+        this.emit('init', message);
+        break;
       
-      this._idMapNeedsUpdate = true;
-      this.playerIdMap.clear();
-      this.enemyIdMap.clear();
-      this.bulletIdMap.clear();
+      case 'mapChange':
+        this._idMapNeedsUpdate = true;
+        this.playerIdMap.clear();
+        this.enemyIdMap.clear();
+        this.bulletIdMap.clear();
+        this.emit('mapChange', message);
+        break;
       
-      this.emit('init', message);
-    }
-    else if (message.type === 'mapChange') {
-      console.log('Received mapChange message for map:', message.newMapId);
-      this._idMapNeedsUpdate = true;
-      this.playerIdMap.clear();
-      this.enemyIdMap.clear();
-      this.bulletIdMap.clear();
-      this.emit('mapChange', message);
-    }
-    else if (message.t === 'u') {
-      if (message.idMap) {
-        if (message.idMap.p) {
-          for (const [shortId, fullId] of Object.entries(message.idMap.p)) {
-            this.playerIdMap.set(parseInt(shortId), fullId);
-          }
+      case 'u':
+        if (message.idMap) {
+          if (message.idMap.p) for (const [s, f] of Object.entries(message.idMap.p)) this.playerIdMap.set(parseInt(s), f);
+          if (message.idMap.e) for (const [s, f] of Object.entries(message.idMap.e)) this.enemyIdMap.set(parseInt(s), f);
+          if (message.idMap.b) for (const [s, f] of Object.entries(message.idMap.b)) this.bulletIdMap.set(parseInt(s), f);
+          this._idMapNeedsUpdate = false;
+        } else if (this._idMapNeedsUpdate) {
+          this.send({ type: 'requestIdMap' });
         }
-        
-        if (message.idMap.e) {
-          for (const [shortId, fullId] of Object.entries(message.idMap.e)) {
-            this.enemyIdMap.set(parseInt(shortId), fullId);
-          }
+  
+        const uListeners = this.events['u'];
+        const updateListeners = this.events['update'];
+  
+        if ((uListeners && uListeners.length > 0) || (updateListeners && updateListeners.length > 0)) {
+          const expandedMsg = {
+            type: 'update',
+            players: message.p ? message.p.map(p_arr => ({
+              id: this.playerIdMap.get(p_arr[0]) || p_arr[0].toString(),
+              x: p_arr[1],
+              y: p_arr[2],
+              isDead: p_arr[3] === 1
+            })) : [],
+            enemies: message.e ? message.e.map(e_arr => ({
+              id: this.enemyIdMap.get(e_arr[0]) || e_arr[0].toString(),
+              type: e_arr[1],
+              x: e_arr[2],
+              y: e_arr[3],
+              radius: e_arr[4]
+            })) : [],
+            bullets: message.b ? message.b.map(b_arr => ({
+              id: this.bulletIdMap.get(b_arr[0]) || b_arr[0].toString(),
+              x: b_arr[1],
+              y: b_arr[2],
+              radius: b_arr[3]
+            })) : []
+          };
+          if (uListeners && uListeners.length > 0) this.emit('u', expandedMsg);
+          if (updateListeners && updateListeners.length > 0) this.emit('update', expandedMsg);
         }
-        
-        if (message.idMap.b) {
-          for (const [shortId, fullId] of Object.entries(message.idMap.b)) {
-            this.bulletIdMap.set(parseInt(shortId), fullId);
-          }
-        }
-        
-        this._idMapNeedsUpdate = false;
-      } else if (this._idMapNeedsUpdate) {
-        this.send({ type: 'requestIdMap' });
-      }
+        break;
       
-      if (this.events['u'] || this.events['update']) {
-        const expandedMsg = {
-          type: 'update',
-          players: message.p.map(p => {
-            const shortId = p[0];
-            const fullId = this.playerIdMap.get(shortId) || shortId.toString();
-            return {
-              id: fullId,
-              x: p[1],
-              y: p[2],
-              isDead: p[3] === 1
-            };
-          }),
-          enemies: message.e ? message.e.map(e => {
-            const shortId = e[0];
-            const fullId = this.enemyIdMap.get(shortId) || shortId.toString();
-            return {
-              id: fullId,
-              type: e[1],
-              x: e[2],
-              y: e[3],
-              radius: e[4]
-            };
-          }) : [],
-          bullets: message.b ? message.b.map(b => {
-            const shortId = b[0];
-            const fullId = this.bulletIdMap.get(shortId) || shortId.toString();
-            return {
-              id: fullId,
-              x: b[1],
-              y: b[2],
-              radius: b[3]
-            };
-          }) : []
-        };
-        
-        if (this.events['u']) {
-          this.emit('u', expandedMsg);
+      case 'm':
+        if (message.x !== undefined && message.y !== undefined && this.events['mousemove'] && this.events['mousemove'].length > 0) {
+          this.emit('mousemove', { type: 'mousemove', x: message.x, y: message.y });
         }
-        if (this.events['update']) {
-          this.emit('update', expandedMsg);
+        break;
+      
+      case 'pong':
+        this.ping = Date.now() - message.clientTime;
+        this.updatePingDisplay();
+        break;
+      
+      case 'chat':
+        this.emit('chat', message);
+        break;
+      
+      default:
+        if (this.events[messageType] && this.events[messageType].length > 0) {
+          this.emit(messageType, message);
         }
-      }
-    }
-    else if (message.type === 'm' && message.x !== undefined && message.y !== undefined && this.events['mousemove']) {
-      const expandedMsg = {
-        type: 'mousemove',
-        x: message.x,
-        y: message.y
-      };
-      this.emit('mousemove', expandedMsg);
-    } 
-    else if (message.type === 'pong') {
-      const now = Date.now();
-      this.ping = now - message.clientTime;
-      this.updatePingDisplay();
-    }
-    else if (message.type === 'chat') {
-      this.emit('chat', message);
-    }
-    else if (message.type && this.events[message.type]) {
-      this.emit(message.type, message);
+        break;
     }
   }
   
   startPingInterval() {
     this.clearPingInterval();
-    this.pingInterval = setInterval(() => this.sendPing(), 1000);
+    this.pingInterval = setInterval(() => this.sendPing(), 2000);
   }
   
   clearPingInterval() {
@@ -242,22 +245,20 @@ export class Network {
     const now = Date.now();
     const dx = x - this.lastSentMousePos.x;
     const dy = y - this.lastSentMousePos.y;
-    const distance = Math.sqrt(dx * dx + dy * dy);
     
-    if (distance > 1 || now - this.lastMovementTime > this.movementThrottle) {
-      const buffer = new ArrayBuffer(9);
+    if (now - this.lastMovementTime > this.movementThrottle || (dx * dx + dy * dy) > this.minSendDistanceSq) { 
+      const buffer = new ArrayBuffer(9); 
       const view = new DataView(buffer);
-      
-      view.setUint8(0, 1);
-      
+      view.setUint8(0, 1); 
       view.setInt32(1, Math.round(x), true);
       view.setInt32(5, Math.round(y), true);
       
-      this.socket.send(buffer);
-      
-      this.lastSentMousePos.x = x;
-      this.lastSentMousePos.y = y;
-      this.lastMovementTime = now;
+      if (this.socket && this.socket.readyState === WebSocket.OPEN) {
+        this.socket.send(buffer);
+        this.lastSentMousePos.x = x;
+        this.lastSentMousePos.y = y;
+        this.lastMovementTime = now;
+      }
     }
   }
   
@@ -274,34 +275,38 @@ export class Network {
       
       if (jsonStr.length > 80) {
         try {
-          const textEncoder = new TextEncoder();
-          const uint8Array = textEncoder.encode(jsonStr);
-          
+          const uint8Array = this.textEncoder.encode(jsonStr);
           const compressed = pako.deflate(uint8Array);
-          
           this.socket.send(compressed.buffer);
-          return;
         } catch (e) {
-          console.error('Compression failed:', e);
+          this.socket.send(jsonStr);
         }
+      } else {
+        this.socket.send(jsonStr);
       }
-      
-      this.socket.send(jsonStr);
     }
   }
   
   on(event, callback) {
+    if (typeof callback !== 'function') {
+        return;
+    }
     if (!this.events[event]) {
       this.events[event] = [];
     }
-    
     this.events[event].push(callback);
   }
   
   emit(event, data) {
     const callbacks = this.events[event];
-    if (callbacks) {
-      callbacks.forEach(callback => callback(data));
+    if (callbacks && callbacks.length > 0) {
+      for (let i = 0; i < callbacks.length; i++) {
+        try {
+            callbacks[i](data);
+        } catch (e) {
+            console.error('Error in event callback:', event, e);
+        }
+      }
     }
   }
-} 
+}

@@ -740,7 +740,6 @@ class Game {
       }
     }
   }
-
   cleanupCachedIds() {
     for (const [id, shortId] of this._cachedPlayerIds.entries()) {
       if (!this.players.has(id)) {
