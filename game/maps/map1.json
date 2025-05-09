@@ -12,8 +12,8 @@
         "maxSpeed": 15
       },
       "sniper": {
-        "count": 10,
-        "radius": 1,
+        "count": 3,
+        "radius": 10,
         "minSpeed": 5,
         "maxSpeed": 8,
         "detectionRange": 500,
