@@ -1,5 +1,5 @@
 const zlib = require('zlib');
-const { Enemy, Sniper, Bullet, ENEMY_TYPES, initializeGridWithMap } = require('./enemy');
+const { Enemy, Sniper, Dasher, Homing, Bullet, ENEMY_TYPES, initializeGridWithMap } = require('./enemy');
 const { Player } = require('./player');
 const { Grid } = require('./grid');
 
@@ -99,6 +99,45 @@ class Game {
           enemiesOnThisMap.set(sniper.id, sniper);
           totalEnemiesSpawned++;
         }
+      } else if (type === "dasher") {
+        for (let i = 0; i < count; i++) {
+          const spawnPos = map.getValidSpawnPosition(spawnTileType, radius, grid);
+          if (!spawnPos) continue;
+
+          const speed = minSpeed + Math.random() * (maxSpeed - minSpeed);
+          const dasher = new Dasher(
+            spawnPos.x, 
+            spawnPos.y, 
+            radius, 
+            speed,
+            config.timeToPrepare,
+            config.timeToDash,
+            config.timeBetweenDashes
+          );
+          
+          dasher.addToGrid(grid);
+          enemiesOnThisMap.set(dasher.id, dasher);
+          totalEnemiesSpawned++;
+        }
+      } else if (type === "homing") {
+        for (let i = 0; i < count; i++) {
+          const spawnPos = map.getValidSpawnPosition(spawnTileType, radius, grid);
+          if (!spawnPos) continue;
+
+          const speed = minSpeed + Math.random() * (maxSpeed - minSpeed);
+          const homing = new Homing(
+            spawnPos.x, 
+            spawnPos.y, 
+            radius, 
+            speed,
+            config.turnIncrement,
+            config.homeRange
+          );
+          
+          homing.addToGrid(grid);
+          enemiesOnThisMap.set(homing.id, homing);
+          totalEnemiesSpawned++;
+        }
       }
     }
     
@@ -178,6 +217,10 @@ class Game {
       
       for (const [enemyId, enemy] of enemiesOnThisMap) {
         if (enemy instanceof Sniper) {
+          enemy.update(map, grid, this);
+        } else if (enemy instanceof Dasher) {
+          enemy.update(map, grid, this);
+        } else if (enemy instanceof Homing) {
           enemy.update(map, grid, this);
         } else {
           enemy.update(map, grid);
