@@ -2,37 +2,15 @@ const { v4: uuidv4 } = require('uuid');
 const Grid = require('./grid');
 
 const ENEMY_TYPES = {
-  1: {
-    name: 'Basic',
-    color: '#808080',
-    outlineColor: '#000000'
-  },
-  2: {
-    name: 'Sniper',
-    color: '#8B0000',
-    outlineColor: '#000000'
-  },
-  3: {
-    name: 'Dasher',
-    color: '#003c66',
-    outlineColor: '#001830'
-  },
-  4: {
-    name: 'Homing',
-    color: '#7F00FF',
-    outlineColor: '#5c4200'
-  },
-  5: {
-    name: 'VoidCrawler',
-    color: '#1c0a2d',
-    outlineColor: '#0d0517'
-  },
-  6: {
-    name: 'Wall',
-    color: '#222222',
-    outlineColor: '#111111'
-  }
+  1: { name: 'Basic', color: '#808080', outlineColor: '#000000' },
+  2: { name: 'Sniper', color: '#8B0000', outlineColor: '#000000' },
+  3: { name: 'Dasher', color: '#003c66', outlineColor: '#001830' },
+  4: { name: 'Homing', color: '#7F00FF', outlineColor: '#5c4200' },
+  5: { name: 'VoidCrawler', color: '#1c0a2d', outlineColor: '#0d0517' },
+  6: { name: 'Wall', color: '#222222', outlineColor: '#111111' }
 };
+
+const MS_PER_GAME_TICK = 1000 / 60;
 
 let gridInstance = null;
 
@@ -57,38 +35,41 @@ class Bullet {
 
     const dx = targetX - x;
     const dy = targetY - y;
-    const length = Math.sqrt(dx * dx + dy * dy);
+    const lengthSq = dx * dx + dy * dy;
     
-    this.vx = (dx / length) * speed;
-    this.vy = (dy / length) * speed;
+    if (lengthSq > 0) {
+      const length = Math.sqrt(lengthSq);
+      this.vx = (dx / length) * speed;
+      this.vy = (dy / length) * speed;
+    } else {
+      this.vx = 0;
+      this.vy = -speed; 
+    }
     
     this.lastUpdateTime = Date.now();
     this.isActive = true;
+    this._collisionShape = { id: this.id, x: 0, y: 0, radius: this.radius };
   }
   
   update(map, grid) {
     if (!this.isActive) return;
     
     const currentTime = Date.now();
-    const deltaTime = (currentTime - this.lastUpdateTime) / 16.67;
+    const deltaTimeFactor = (currentTime - this.lastUpdateTime) / MS_PER_GAME_TICK;
     this.lastUpdateTime = currentTime;
     
     this.prevX = this.x;
     this.prevY = this.y;
     
-    const newX = this.x + this.vx * deltaTime;
-    const newY = this.y + this.vy * deltaTime;
+    const newX = this.x + this.vx * deltaTimeFactor;
+    const newY = this.y + this.vy * deltaTimeFactor;
     
-    const bulletObj = {
-      id: this.id,
-      x: newX,
-      y: newY,
-      radius: this.radius
-    };
+    this._collisionShape.x = newX;
+    this._collisionShape.y = newY;
 
-    if (grid.checkWallCollision(bulletObj) || 
-        grid.checkSafeZoneCollision(bulletObj) ||
-        grid.checkTeleporterCollision(bulletObj) ||
+    if (grid.checkWallCollision(this._collisionShape) || 
+        grid.checkSafeZoneCollision(this._collisionShape) ||
+        grid.checkTeleporterCollision(this._collisionShape) ||
         newX - this.radius < 0 || 
         newX + this.radius > map.width * map.tileSize || 
         newY - this.radius < 0 || 
@@ -134,40 +115,56 @@ class Enemy {
     this.prevX = x;
     this.prevY = y;
     this.radius = radius;
-    this.color = ENEMY_TYPES[type].color;
-    this.outlineColor = ENEMY_TYPES[type].outlineColor;
+
+    const typeConfig = ENEMY_TYPES[type] || ENEMY_TYPES[1]; 
+    this.color = typeConfig.color;
+    this.outlineColor = typeConfig.outlineColor;
     
     const directions = [
-      { x: 1, y: 0 },
-      { x: -1, y: 0 },
-      { x: 0, y: 1 },
-      { x: 0, y: -1 },
-      { x: 1, y: 1 },
-      { x: -1, y: 1 },
-      { x: 1, y: -1 },
-      { x: -1, y: -1 }
+      { x: 1, y: 0 }, { x: -1, y: 0 }, { x: 0, y: 1 }, { x: 0, y: -1 },
+      { x: 1, y: 1 }, { x: -1, y: 1 }, { x: 1, y: -1 }, { x: -1, y: -1 }
     ];
-    
-    const randomDir = directions[Math.floor(Math.random() * directions.length)];
+    const randomBaseDir = directions[Math.floor(Math.random() * directions.length)];
     
     const offsetX = (Math.random() * 0.4) - 0.2;
     const offsetY = (Math.random() * 0.4) - 0.2;
     
-    const dirX = randomDir.x + offsetX;
-    const dirY = randomDir.y + offsetY;
+    const dirX = randomBaseDir.x + offsetX;
+    const dirY = randomBaseDir.y + offsetY;
+    const lengthSq = dirX * dirX + dirY * dirY;
     
-    const length = Math.sqrt(dirX * dirX + dirY * dirY);
-    
-    this.vx = (dirX / length) * speed;
-    this.vy = (dirY / length) * speed;
+    if (lengthSq > 0) {
+      const length = Math.sqrt(lengthSq);
+      this.vx = (dirX / length) * speed;
+      this.vy = (dirY / length) * speed;
+    } else {
+      this.vx = speed; 
+      this.vy = 0;
+    }
     
     this.speed = speed;
     this.lastUpdateTime = Date.now();
+    this._collisionShape = { id: this.id, x: 0, y: 0, radius: this.radius };
+  }
+
+  _normalizeVelocity() {
+    const currentSpeedSq = this.vx * this.vx + this.vy * this.vy;
+    if (currentSpeedSq > 0) {
+      const currentSpeed = Math.sqrt(currentSpeedSq);
+      if (currentSpeed !== this.speed) { 
+        this.vx = (this.vx / currentSpeed) * this.speed;
+        this.vy = (this.vy / currentSpeed) * this.speed;
+      }
+    } else if (this.speed > 0) {
+        const angle = Math.random() * Math.PI * 2;
+        this.vx = Math.cos(angle) * this.speed;
+        this.vy = Math.sin(angle) * this.speed;
+    }
   }
   
   update(map, grid) {
     const currentTime = Date.now();
-    const deltaTime = (currentTime - this.lastUpdateTime) / 16.67;
+    const deltaTimeFactor = (currentTime - this.lastUpdateTime) / MS_PER_GAME_TICK;
     this.lastUpdateTime = currentTime;
     
     this.prevX = this.x;
@@ -175,80 +172,54 @@ class Enemy {
     
     let positionChanged = false;
 
-    const newX = this.x + this.vx * deltaTime;
-    const newY = this.y + this.vy * deltaTime;
+    const newX = this.x + this.vx * deltaTimeFactor;
+    const newY = this.y + this.vy * deltaTimeFactor;
     
-    const tempX = {
-      id: this.id,
-      x: newX,
-      y: this.y,
-      radius: this.radius
-    };
+    this._collisionShape.x = newX;
+    this._collisionShape.y = this.y;
+    this._collisionShape.radius = this.radius;
 
-    if (grid.checkWallCollision(tempX) || grid.checkSafeZoneCollision(tempX) || grid.checkTeleporterCollision(tempX)) {
+    if (grid.checkWallCollision(this._collisionShape) || grid.checkSafeZoneCollision(this._collisionShape) || grid.checkTeleporterCollision(this._collisionShape)) {
       this.vx = -this.vx;
-
-      this.vx += (Math.random() - 0.5) * 0.2;
+      this.vx += (Math.random() - 0.5) * 0.2; 
       this.vy += (Math.random() - 0.5) * 0.2;
-
-      const speed = Math.sqrt(this.vx * this.vx + this.vy * this.vy);
-      this.vx = (this.vx / speed) * this.speed;
-      this.vy = (this.vy / speed) * this.speed;
+      this._normalizeVelocity();
     } else {
       this.x = newX;
       positionChanged = true;
     }
 
-    const tempY = {
-      id: this.id,
-      x: this.x,
-      y: newY,
-      radius: this.radius
-    };
+    this._collisionShape.x = this.x;
+    this._collisionShape.y = newY;
     
-    if (grid.checkWallCollision(tempY) || grid.checkSafeZoneCollision(tempY) || grid.checkTeleporterCollision(tempY)) {
+    if (grid.checkWallCollision(this._collisionShape) || grid.checkSafeZoneCollision(this._collisionShape) || grid.checkTeleporterCollision(this._collisionShape)) {
       this.vy = -this.vy;
-
       this.vx += (Math.random() - 0.5) * 0.2;
       this.vy += (Math.random() - 0.5) * 0.2;
-
-      const speed = Math.sqrt(this.vx * this.vx + this.vy * this.vy);
-      this.vx = (this.vx / speed) * this.speed;
-      this.vy = (this.vy / speed) * this.speed;
+      this._normalizeVelocity();
     } else {
       this.y = newY;
       positionChanged = true;
     }
 
-    const boundaryCheck = {
-      id: this.id,
-      x: this.x,
-      y: this.y,
-      radius: this.radius
-    };
+    this._collisionShape.x = this.x;
+    this._collisionShape.y = this.y;
     
-    if (grid.checkWallCollision(boundaryCheck) || 
-        grid.checkSafeZoneCollision(boundaryCheck) ||
-        grid.checkTeleporterCollision(boundaryCheck) ||
+    if (grid.checkWallCollision(this._collisionShape) || 
+        grid.checkSafeZoneCollision(this._collisionShape) ||
+        grid.checkTeleporterCollision(this._collisionShape) ||
         this.x - this.radius < 0 || 
         this.x + this.radius > map.width * map.tileSize || 
         this.y - this.radius < 0 || 
         this.y + this.radius > map.height * map.tileSize) {
-
-
       this.x = this.prevX;
       this.y = this.prevY;
       positionChanged = false;
-
       this.vx = -this.vx;
       this.vy = -this.vy;
-
       this.vx += (Math.random() - 0.5) * 0.5;
       this.vy += (Math.random() - 0.5) * 0.5;
-
-      const speed = Math.sqrt(this.vx * this.vx + this.vy * this.vy);
-      this.vx = (this.vx / speed) * this.speed;
-      this.vy = (this.vy / speed) * this.speed;
+      this._normalizeVelocity();
     }
 
     if (positionChanged) {
@@ -259,20 +230,23 @@ class Enemy {
   checkEnemyCollisions(grid) {
     const nearbyEnemyIds = grid.getNearbyEntities(this);
     const collisions = [];
+    const combinedRadiusBase = this.radius;
     
     for (const id of nearbyEnemyIds) {
-      const otherEnemy = grid.entities.get(id)?.entity;
-      if (!otherEnemy) continue;
+      const otherEnemyContainer = grid.entities.get(id);
+      if (!otherEnemyContainer || !otherEnemyContainer.entity) continue;
+      const otherEnemy = otherEnemyContainer.entity;
+      if (otherEnemy === this) continue;
       
       const dx = this.x - otherEnemy.x;
       const dy = this.y - otherEnemy.y;
-      const distance = Math.sqrt(dx * dx + dy * dy);
+      const distanceSq = dx * dx + dy * dy;
+      const combinedRadius = combinedRadiusBase + otherEnemy.radius;
       
-      if (distance < this.radius + otherEnemy.radius) {
+      if (distanceSq < combinedRadius * combinedRadius) {
         collisions.push(otherEnemy);
       }
     }
-    
     return collisions;
   }
   
@@ -300,8 +274,8 @@ class Enemy {
 class Sniper extends Enemy {
   constructor(x, y, radius, speed, detectionRange = 500, shootingRange = 400, maxShootCooldown = 100, bulletRadius = 5, bulletSpeed = 5) {
     super(x, y, radius, speed, 2);
-    this.detectionRange = detectionRange;
-    this.shootingRange = shootingRange;
+    this.detectionRangeSq = detectionRange * detectionRange;
+    this.shootingRangeSq = shootingRange * shootingRange;
     this.shootCooldown = 0;
     this.maxShootCooldown = maxShootCooldown;
     this.bulletRadius = bulletRadius;
@@ -320,42 +294,40 @@ class Sniper extends Enemy {
     if (game && this.shootCooldown === 0) {
       const players = game.players;
       let closestPlayer = null;
-      let closestDistance = Infinity;
+      let closestDistanceSq = this.detectionRangeSq;
 
-      for (const [playerId, player] of players) {
+      for (const player of players.values()) {
         if (player.isDead || player.currentMapId !== game.currentMapId) continue;
         
         const dx = player.x - this.x;
         const dy = player.y - this.y;
-        const distance = Math.sqrt(dx * dx + dy * dy);
+        const distanceSq = dx * dx + dy * dy;
         
-        if (distance < this.detectionRange && distance < closestDistance) {
-          closestDistance = distance;
+        if (distanceSq < closestDistanceSq) {
+          closestDistanceSq = distanceSq;
           closestPlayer = player;
-          this.lastTargetX = player.x;
-          this.lastTargetY = player.y;
         }
       }
 
-      if (closestPlayer && this.lastTargetX !== null && this.lastTargetY !== null && closestDistance <= this.shootingRange) {
+      if (closestPlayer && closestDistanceSq <= this.shootingRangeSq) {
+        this.lastTargetX = closestPlayer.x;
+        this.lastTargetY = closestPlayer.y;
         const bullet = new Bullet(
-          this.x, 
-          this.y, 
-          this.lastTargetX, 
-          this.lastTargetY, 
-          this.bulletRadius, 
-          this.bulletSpeed
+          this.x, this.y, 
+          this.lastTargetX, this.lastTargetY, 
+          this.bulletRadius, this.bulletSpeed
         );
 
         if (game.mapBullets && game.currentMapId) {
           const bulletsOnMap = game.mapBullets.get(game.currentMapId) || new Map();
           bulletsOnMap.set(bullet.id, bullet);
           game.mapBullets.set(game.currentMapId, bulletsOnMap);
-
           bullet.addToGrid(grid);
         }
-        
         this.shootCooldown = this.maxShootCooldown;
+      } else {
+        this.lastTargetX = null;
+        this.lastTargetY = null;
       }
     }
   }
@@ -364,8 +336,8 @@ class Sniper extends Enemy {
     const baseData = super.serialize();
     return {
       ...baseData,
-      detectionRange: this.detectionRange,
-      shootingRange: this.shootingRange
+      detectionRange: Math.sqrt(this.detectionRangeSq),
+      shootingRange: Math.sqrt(this.shootingRangeSq)
     };
   }
 }
@@ -373,12 +345,12 @@ class Sniper extends Enemy {
 class Dasher extends Enemy {
   constructor(x, y, radius, speed, timeToPrepare = 750, timeToDash = 3000, timeBetweenDashes = 750) {
     super(x, y, radius, speed, 3);
-    this.speed = speed;
-    this.time_to_prepare = 750;
-    this.time_to_dash = 3000;
-    this.time_between_dashes = 750;
+    this.speed = speed; 
+    this.time_to_prepare = timeToPrepare;
+    this.time_to_dash = timeToDash;
+    this.time_between_dashes = timeBetweenDashes;
     this.normal_speed = speed;
-    this.base_speed = this.normal_speed / 5;
+    this.base_speed = this.normal_speed / 5; 
     this.prepare_speed = this.normal_speed / 5;
     this.dash_speed = this.normal_speed;
     this.time_dashing = 0;
@@ -389,6 +361,13 @@ class Dasher extends Enemy {
     this.originalVx = this.vx;
     this.originalVy = this.vy;
     this.originalSpeed = Math.sqrt(this.vx * this.vx + this.vy * this.vy);
+    if (this.originalSpeed === 0 && this.speed > 0) { 
+        const angle = Math.random() * Math.PI * 2;
+        this.originalVx = Math.cos(angle) * this.speed;
+        this.originalVy = Math.sin(angle) * this.speed;
+        this.originalSpeed = this.speed;
+    }
+
 
     this.hitWall = false;
   }
@@ -397,10 +376,10 @@ class Dasher extends Enemy {
     let newSpeed = 0;
     
     if (this.time_since_last_dash < this.time_between_dashes && 
-        this.time_dashing == 0 && 
-        this.time_preparing == 0) {
+        this.time_dashing === 0 && 
+        this.time_preparing === 0) {
       newSpeed = 0;
-    } else if (this.time_dashing == 0) {
+    } else if (this.time_dashing === 0) {
       newSpeed = this.prepare_speed;
     } else {
       newSpeed = this.base_speed;
@@ -430,7 +409,6 @@ class Dasher extends Enemy {
       this.vx = Math.cos(angle) * this.speed;
       this.vy = Math.sin(angle) * this.speed;
       
-      // Store as original
       this.originalVx = this.vx;
       this.originalVy = this.vy;
       this.originalSpeed = this.speed;
@@ -442,81 +420,38 @@ class Dasher extends Enemy {
     const deltaTimeMs = currentTimeMs - this.lastUpdateTimeMs;
     this.lastUpdateTimeMs = currentTimeMs;
     
-    const prevX = this.x;
-    const prevY = this.y;
-    const prevVx = this.vx;
-    const prevVy = this.vy;
-    
     this.behavior(deltaTimeMs);
     
-    const currentTime = Date.now();
-    const deltaTime = (currentTime - this.lastUpdateTime) / 16.67;
-    this.lastUpdateTime = currentTime;
+    const currentTimeForPhysics = Date.now();
+    const deltaTimeFactor = (currentTimeForPhysics - this.lastUpdateTime) / MS_PER_GAME_TICK;
+    this.lastUpdateTime = currentTimeForPhysics;
     
     this.prevX = this.x;
     this.prevY = this.y;
     
     let positionChanged = false;
 
-    const newX = this.x + this.vx * deltaTime;
-    const newY = this.y + this.vy * deltaTime;
+    const newX = this.x + this.vx * deltaTimeFactor;
+    const newY = this.y + this.vy * deltaTimeFactor;
     
-    const tempX = {
-      id: this.id,
-      x: newX,
-      y: this.y,
-      radius: this.radius
-    };
+    this._collisionShape.x = newX; this._collisionShape.y = this.y; this._collisionShape.radius = this.radius;
+    if (grid.checkWallCollision(this._collisionShape) || grid.checkSafeZoneCollision(this._collisionShape) || grid.checkTeleporterCollision(this._collisionShape)) {
+      this.vx = -this.vx; this.hitWall = true; positionChanged = false;
+    } else { this.x = newX; positionChanged = true; }
 
-    if (grid.checkWallCollision(tempX) || grid.checkSafeZoneCollision(tempX) || grid.checkTeleporterCollision(tempX)) {
-      this.vx = -this.vx;
-      this.hitWall = true;
-      
-      positionChanged = false;
-    } else {
-      this.x = newX;
-      positionChanged = true;
-    }
+    this._collisionShape.x = this.x; this._collisionShape.y = newY;
+    if (grid.checkWallCollision(this._collisionShape) || grid.checkSafeZoneCollision(this._collisionShape) || grid.checkTeleporterCollision(this._collisionShape)) {
+      this.vy = -this.vy; this.hitWall = true; positionChanged = false;
+    } else { this.y = newY; positionChanged = true; }
 
-    const tempY = {
-      id: this.id,
-      x: this.x,
-      y: newY,
-      radius: this.radius
-    };
-    
-    if (grid.checkWallCollision(tempY) || grid.checkSafeZoneCollision(tempY) || grid.checkTeleporterCollision(tempY)) {
-      this.vy = -this.vy;
-      this.hitWall = true;
-      
-      positionChanged = false;
-    } else {
-      this.y = newY;
-      positionChanged = true;
-    }
-
-    const boundaryCheck = {
-      id: this.id,
-      x: this.x,
-      y: this.y,
-      radius: this.radius
-    };
-    
-    if (grid.checkWallCollision(boundaryCheck) || 
-        grid.checkSafeZoneCollision(boundaryCheck) ||
-        grid.checkTeleporterCollision(boundaryCheck) ||
-        this.x - this.radius < 0 || 
-        this.x + this.radius > map.width * map.tileSize || 
-        this.y - this.radius < 0 || 
-        this.y + this.radius > map.height * map.tileSize) {
-
-      this.x = this.prevX;
-      this.y = this.prevY;
-      positionChanged = false;
-
-      this.vx = -this.vx;
-      this.vy = -this.vy;
-      this.hitWall = true;
+    this._collisionShape.x = this.x; this._collisionShape.y = this.y;
+    if (grid.checkWallCollision(this._collisionShape) || 
+        grid.checkSafeZoneCollision(this._collisionShape) ||
+        grid.checkTeleporterCollision(this._collisionShape) ||
+        this.x - this.radius < 0 || this.x + this.radius > map.width * map.tileSize || 
+        this.y - this.radius < 0 || this.y + this.radius > map.height * map.tileSize) {
+      this.x = this.prevX; this.y = this.prevY; positionChanged = false;
+      this.vx = -this.vx; this.vy = -this.vy; this.hitWall = true;
     }
 
     if (positionChanged) {
@@ -524,16 +459,22 @@ class Dasher extends Enemy {
     }
     
     if (this.hitWall) {
-      this.originalVx = this.vx;
-      this.originalVy = this.vy;
+      this.originalVx = this.vx; this.originalVy = this.vy;
       this.originalSpeed = Math.sqrt(this.vx * this.vx + this.vy * this.vy);
+      if (this.originalSpeed === 0 && this.speed > 0) {
+          const angle = Math.random() * Math.PI * 2;
+          this.originalVx = Math.cos(angle); 
+          this.originalVy = Math.sin(angle);
+          this.originalSpeed = 1;
+      }
       this.hitWall = false;
+      this.updateVelocity(); 
     }
   }
   
   behavior(time) {
-    if (this.time_preparing == 0) {
-      if (this.time_dashing == 0) {
+    if (this.time_preparing === 0) {
+      if (this.time_dashing === 0) {
         if (this.time_since_last_dash < this.time_between_dashes) {
           this.time_since_last_dash += time;
         } else {
@@ -554,7 +495,7 @@ class Dasher extends Enemy {
       this.time_preparing += time;
       if (this.time_preparing > this.time_to_prepare) {
         this.time_preparing = 0;
-        this.time_dashing += time;
+        this.time_dashing += time; 
         this.base_speed = this.dash_speed;
       } else {
         this.base_speed = this.prepare_speed * (1 - (this.time_preparing / this.time_to_prepare));
@@ -565,12 +506,7 @@ class Dasher extends Enemy {
   
   serialize() {
     const baseData = super.serialize();
-    return {
-      ...baseData,
-      time_dashing: this.time_dashing,
-      time_preparing: this.time_preparing,
-      time_since_last_dash: this.time_since_last_dash
-    };
+    return { ...baseData, time_dashing: this.time_dashing, time_preparing: this.time_preparing, time_since_last_dash: this.time_since_last_dash };
   }
 }
 
@@ -578,10 +514,10 @@ class Homing extends Enemy {
   constructor(x, y, radius, speed, increment = 0.05, homeRange = 200) {
     super(x, y, radius, speed, 4);
     this.increment = increment;
-    this.homeRange = homeRange;
+    this.homeRangeSq = homeRange * homeRange;
     this.angle = Math.atan2(this.vy, this.vx);
     this.targetAngle = this.angle;
-    this.lastUpdateTimeMs = Date.now();
+    this.lastUpdateTimeMs = Date.now(); 
   }
   
   update(map, grid, game) {
@@ -589,16 +525,13 @@ class Homing extends Enemy {
     const deltaTimeMs = currentTimeMs - this.lastUpdateTimeMs;
     this.lastUpdateTimeMs = currentTimeMs;
     
-    this.behavior(deltaTimeMs, game);
-    
-    super.update(map, grid);
+    this.behavior(deltaTimeMs, game); 
+    super.update(map, grid); 
   }
   
   behavior(time, game) {
     this.angle = Math.atan2(this.vy, this.vx);
-    
     const closestPlayer = this.findClosestPlayer(game);
-    
     if (closestPlayer) {
       const dX = closestPlayer.x - this.x;
       const dY = closestPlayer.y - this.y;
@@ -606,10 +539,10 @@ class Homing extends Enemy {
     }
     
     const angleDiff = Math.atan2(Math.sin(this.targetAngle - this.angle), Math.cos(this.targetAngle - this.angle));
-    const angleIncrement = this.increment * (time / 60);
+    const angleIncrement = this.increment * (time / (1000/60));
     
-    if (Math.abs(angleDiff) >= this.increment) {
-      this.angle += Math.sign(angleDiff) * angleIncrement;
+    if (Math.abs(angleDiff) >= 0.01) { 
+      this.angle += Math.sign(angleDiff) * Math.min(Math.abs(angleDiff), angleIncrement);
     }
     
     this.vx = Math.cos(this.angle) * this.speed;
@@ -618,34 +551,25 @@ class Homing extends Enemy {
   
   findClosestPlayer(game) {
     if (!game || !game.players) return null;
-    
-    let closestDist = this.homeRange;
     let closestPlayer = null;
+    let minDistanceSq = this.homeRangeSq; 
     
-    for (const [playerId, player] of game.players) {
+    for (const player of game.players.values()) {
       if (player.isDead || player.currentMapId !== game.currentMapId) continue;
-      
       const dx = player.x - this.x;
       const dy = player.y - this.y;
-      const dist = Math.sqrt(dx * dx + dy * dy);
-      
-      if (dist < closestDist) {
-        closestDist = dist;
+      const distanceSq = dx * dx + dy * dy;
+      if (distanceSq < minDistanceSq) {
+        minDistanceSq = distanceSq;
         closestPlayer = player;
       }
     }
-    
     return closestPlayer;
   }
   
   serialize() {
     const baseData = super.serialize();
-    return {
-      ...baseData,
-      homeRange: this.homeRange,
-      angle: this.angle,
-      targetAngle: this.targetAngle
-    };
+    return { ...baseData, homeRange: Math.sqrt(this.homeRangeSq), angle: this.angle, targetAngle: this.targetAngle };
   }
 }
 
@@ -653,7 +577,7 @@ class VoidCrawler extends Enemy {
   constructor(x, y, radius, speed, increment = 0.05, homeRange = 200) {
     super(x, y, radius, speed, 5);
     this.increment = increment;
-    this.homeRange = homeRange;
+    this.homeRangeSq = homeRange * homeRange;
     
     this.normal_speed = speed;
     this.base_speed = this.normal_speed;
@@ -682,8 +606,8 @@ class VoidCrawler extends Enemy {
   }
   
   behavior(time, game) {
-    if (this.time_preparing == 0) {
-      if (this.time_lurching == 0) {
+    if (this.time_preparing === 0) {
+      if (this.time_lurching === 0) {
         if (this.time_since_last_lurch < this.time_between_lurches) {
           this.time_since_last_lurch += time;
         } else {
@@ -697,10 +621,7 @@ class VoidCrawler extends Enemy {
           this.time_lurching = 0;
           this.base_speed = this.normal_speed;
         } else {
-          this.base_speed = this.lurch_speed * (
-            1 - Math.pow(this.time_lurching / this.time_to_lurch, 5)
-          );
-          this.compute_speed();
+          this.base_speed = this.lurch_speed * (1 - Math.pow(this.time_lurching / this.time_to_lurch, 5));
         }
       }
     } else {
@@ -710,12 +631,11 @@ class VoidCrawler extends Enemy {
         this.time_lurching += time;
         this.base_speed = this.lurch_speed;
       } else {
-        this.base_speed = this.prepare_speed * (
-          1 - (this.time_preparing / this.time_to_prepare)
-        );
-        this.compute_speed();
+        this.base_speed = this.prepare_speed * (1 - (this.time_preparing / this.time_to_prepare));
       }
     }
+    this.compute_speed();
+
     this.angle = Math.atan2(this.vy, this.vx);
     const closestPlayer = this.findClosestPlayer(game);
     if (closestPlayer) {
@@ -725,53 +645,41 @@ class VoidCrawler extends Enemy {
     }
 
     const angleDiff = Math.atan2(Math.sin(this.targetAngle - this.angle), Math.cos(this.targetAngle - this.angle));
-    const angleIncrement = this.increment * (time / 30);
+    const angleIncrementThisFrame = this.increment * (time / (1000/60));
     
-    if (Math.abs(angleDiff) >= this.increment) {
-      this.angle += Math.sign(angleDiff) * angleIncrement;
+    if (Math.abs(angleDiff) >= 0.01) {
+      this.angle += Math.sign(angleDiff) * Math.min(Math.abs(angleDiff), angleIncrementThisFrame);
     }
     
-    this.compute_speed();
+    this.vx = Math.cos(this.angle) * this.speed; // this.speed should be current after compute_speed
+    this.vy = Math.sin(this.angle) * this.speed;
   }
   
   compute_speed() {
-    this.speed = this.base_speed;
-    this.vx = Math.cos(this.angle) * this.speed;
-    this.vy = Math.sin(this.angle) * this.speed;
+    this.speed = Math.max(0, this.base_speed); 
   }
   
   findClosestPlayer(game) {
     if (!game || !game.players) return null;
-    
-    let closestDist = this.homeRange;
     let closestPlayer = null;
+    let minDistanceSq = this.homeRangeSq;
     
-    for (const [playerId, player] of game.players) {
+    for (const player of game.players.values()) {
       if (player.isDead || player.currentMapId !== game.currentMapId) continue;
-      
       const dx = player.x - this.x;
       const dy = player.y - this.y;
-      const dist = Math.sqrt(dx * dx + dy * dy);
-      
-      if (dist < closestDist) {
-        closestDist = dist;
+      const distanceSq = dx * dx + dy * dy;
+      if (distanceSq < minDistanceSq) {
+        minDistanceSq = distanceSq;
         closestPlayer = player;
       }
     }
-    
     return closestPlayer;
   }
   
   serialize() {
     const baseData = super.serialize();
-    return {
-      ...baseData,
-      time_preparing: this.time_preparing,
-      time_lurching: this.time_lurching,
-      time_since_last_lurch: this.time_since_last_lurch,
-      angle: this.angle,
-      targetAngle: this.targetAngle
-    };
+    return { ...baseData, time_preparing: this.time_preparing, time_lurching: this.time_lurching, time_since_last_lurch: this.time_since_last_lurch, angle: this.angle, targetAngle: this.targetAngle };
   }
 }
 
@@ -971,31 +879,22 @@ class Wall extends Enemy {
     };
   }
 }
-
 Enemy.initializeGridWithMap = function(map) {
   const effectiveCellSize = map.tileSize || 64;
-  const grid = new Grid(map.width * map.tileSize, map.height * map.tileSize, effectiveCellSize);
-  grid.initializeMapData(map);
-  return grid;
+  gridInstance = new Grid(map.width * map.tileSize, map.height * map.tileSize, effectiveCellSize);
+  gridInstance.initializeMapData(map);
+  return gridInstance;
 };
 
 Enemy.bulkAddToGrid = function(enemies, grid) {
   if (!enemies || enemies.length === 0) return;
-  
   grid.bulkInsert(enemies);
-  
-  return grid;
 };
 
 module.exports = { 
-  Enemy, 
-  Sniper,
-  Dasher,
-  Homing,
-  VoidCrawler,
-  Wall,
-  Bullet,
-  ENEMY_TYPES, 
+  Enemy, Sniper, Dasher, Homing, VoidCrawler, Wall,
+  Bullet, ENEMY_TYPES, 
   initializeGridWithMap: Enemy.initializeGridWithMap,
-  bulkAddToGrid: Enemy.bulkAddToGrid
-}; 
+  bulkAddToGrid: Enemy.bulkAddToGrid,
+  getGrid 
+};
