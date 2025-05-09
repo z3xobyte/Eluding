@@ -389,6 +389,17 @@
             }
         };
         
+        // Add teleporter controls
+        const teleporterFolder = gui.addFolder('Teleporters');
+        const teleporterControls = {
+            teleporters: {},
+            addNew: () => {
+                editTeleporter(-1);
+            }
+        };
+        teleporterFolder.add(teleporterControls, 'addNew').name('Add New Teleporter');
+        teleporterFolder.open();
+        
         mapSettingsFolder.add(mapSettings, 'width', 5, 100, 1).name('Width (tiles)');
         mapSettingsFolder.add(mapSettings, 'height', 5, 100, 1).name('Height (tiles)');
         mapSettingsFolder.add(mapSettings, 'tileSize', 20, 200, 5).name('Tile Size (px)');
