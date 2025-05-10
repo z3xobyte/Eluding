@@ -17,5 +17,7 @@ yarn-error.log*
 *.suo
 *.ntvs*
 *.njsproj
+.cursorrules
+.cursor/rules
 *.sln
 *.sw? 

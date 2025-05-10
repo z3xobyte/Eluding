@@ -151,21 +151,107 @@ class Player {
       }
     }
     
-    const intendedNewX = this.x + this.vx * deltaTimeFactor;
-    const intendedNewY = this.y + this.vy * deltaTimeFactor;
+    const oldX = this.x;
+    const oldY = this.y;
+    const moveDx = this.vx * deltaTimeFactor;
+    const moveDy = this.vy * deltaTimeFactor;
+    let collisionOccurred = false;
+
+    if (moveDx !== 0) {
+        const intendedPosX = this.x + moveDx;
+        if (!this.collidesWithWall(intendedPosX, this.y, map)) {
+            this.x = intendedPosX;
+        } else {
+            collisionOccurred = true;
+            const tileSize = map.tileSize;
+            const pTop = this.y - this.radius;
+            const pBottom = this.y + this.radius;
+            const topTileY = Math.max(0, Math.floor(pTop / tileSize));
+            const bottomTileY = Math.min(map.height - 1, Math.floor(pBottom / tileSize));
+            let contactPixelX;
+
+            if (moveDx > 0) {
+                contactPixelX = intendedPosX + this.radius;
+                const firstTx = Math.floor((this.x + this.radius) / tileSize);
+                const lastTx = Math.floor((intendedPosX + this.radius) / tileSize);
+                for (let tx = firstTx; tx <= lastTx; tx++) {
+                    if (tx < 0 || tx >= map.width) continue;
+                    for (let ty = topTileY; ty <= bottomTileY; ty++) {
+                        if (map.isWall(tx, ty)) {
+                            contactPixelX = Math.min(contactPixelX, tx * tileSize);
+                            break;
+                        }
+                    }
+                }
+                this.x = contactPixelX - this.radius - 0.001;
+            } else {
+                contactPixelX = intendedPosX - this.radius;
+                const firstTx = Math.floor((this.x - this.radius) / tileSize);
+                const lastTx = Math.floor((intendedPosX - this.radius) / tileSize);
+                for (let tx = firstTx; tx >= lastTx; tx--) {
+                    if (tx < 0 || tx >= map.width) continue;
+                    for (let ty = topTileY; ty <= bottomTileY; ty++) {
+                        if (map.isWall(tx, ty)) {
+                            contactPixelX = Math.max(contactPixelX, (tx + 1) * tileSize);
+                            break; 
+                        }
+                    }
+                }
+                this.x = contactPixelX + this.radius + 0.001;
+            }
+        }
+    }
+
+    if (moveDy !== 0) {
+        const intendedPosY = this.y + moveDy;
+        if (!this.collidesWithWall(this.x, intendedPosY, map)) {
+            this.y = intendedPosY;
+        } else {
+            collisionOccurred = true;
+            const tileSize = map.tileSize;
+            const pLeft = this.x - this.radius;
+            const pRight = this.x + this.radius;
+            const leftTileX = Math.max(0, Math.floor(pLeft / tileSize));
+            const rightTileX = Math.min(map.width - 1, Math.floor(pRight / tileSize));
+            let contactPixelY;
+
+            if (moveDy > 0) {
+                contactPixelY = intendedPosY + this.radius;
+                const firstTy = Math.floor((this.y + this.radius) / tileSize);
+                const lastTy = Math.floor((intendedPosY + this.radius) / tileSize);
+                for (let ty = firstTy; ty <= lastTy; ty++) {
+                    if (ty < 0 || ty >= map.height) continue;
+                    for (let tx = leftTileX; tx <= rightTileX; tx++) {
+                        if (map.isWall(tx, ty)) {
+                            contactPixelY = Math.min(contactPixelY, ty * tileSize);
+                            break;
+                        }
+                    }
+                }
+                this.y = contactPixelY - this.radius - 0.001;
+            } else {
+                contactPixelY = intendedPosY - this.radius;
+                const firstTy = Math.floor((this.y - this.radius) / tileSize);
+                const lastTy = Math.floor((intendedPosY - this.radius) / tileSize);
+                for (let ty = firstTy; ty >= lastTy; ty--) {
+                    if (ty < 0 || ty >= map.height) continue;
+                    for (let tx = leftTileX; tx <= rightTileX; tx++) {
+                        if (map.isWall(tx, ty)) {
+                            contactPixelY = Math.max(contactPixelY, (ty + 1) * tileSize);
+                            break;
+                        }
+                    }
+                }
+                this.y = contactPixelY + this.radius + 0.001;
+            }
+        }
+    }
     
-    const canMoveX = !this.collidesWithWall(intendedNewX, this.y, map);
-    const canMoveY = !this.collidesWithWall(this.x, intendedNewY, map);
-
-    if (canMoveX) this.x = intendedNewX;
-    if (canMoveY) this.y = intendedNewY;
-
-    if (!canMoveX && !canMoveY && (this.vx !== 0 || this.vy !== 0)) {
+    if (this.x === oldX && this.y === oldY && (this.vx !== 0 || this.vy !== 0)) {
        this.handleSliding(map, deltaTimeFactor);
     }
 
-
-    if (this.input && (!canMoveX || !canMoveY)) {
+    if (this.input && collisionOccurred) {
       this.input.setSlippery(false);
     }
 

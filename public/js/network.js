@@ -17,6 +17,7 @@ export class Network {
     
     this._ownPlayerId = null;
     this._idMapNeedsUpdate = false;
+    this._pendingMapData = null;
 
     this.textEncoder = new TextEncoder();
     this.reconnectAttempts = 0;
@@ -111,9 +112,31 @@ export class Network {
       
       if (event.data instanceof ArrayBuffer) {
         const compressedData = new Uint8Array(event.data);
-        const decompressedData = await CompressionUtils.decompressGzip(compressedData);
-        const text = new TextDecoder().decode(decompressedData);
-        message = JSON.parse(text);
+        
+        try {
+          const decompressedData = pako.inflate(compressedData);
+          const text = new TextDecoder().decode(decompressedData);
+          
+          try {
+            const parsedData = JSON.parse(text);
+            
+            if (parsedData.tiles && parsedData.width && parsedData.height) {
+              this._processBinaryMapData(parsedData);
+              return;
+            }
+            
+            // Otherwise treat as a regular message
+            message = parsedData;
+          } catch (parseError) {
+            const gzipData = await CompressionUtils.decompressGzip(compressedData);
+            const gzipText = new TextDecoder().decode(gzipData);
+            message = JSON.parse(gzipText);
+          }
+        } catch (inflateError) {
+          const gzipData = await CompressionUtils.decompressGzip(compressedData);
+          const text = new TextDecoder().decode(gzipData);
+          message = JSON.parse(text);
+        }
       } else if (typeof event.data === 'string') {
         message = JSON.parse(event.data);
       } else {
@@ -123,6 +146,37 @@ export class Network {
       this.handleMessage(message);
     } catch (e) {
       console.error('Failed to parse or handle message:', e, event.data);
+    }
+  }
+  
+  _processBinaryMapData(mapData) {
+    try {
+      const width = mapData.width;
+      const height = mapData.height;
+      const tiles = mapData.tiles;
+      
+      if (tiles && Array.isArray(tiles) && width && height) {
+        const map = [];
+        for (let y = 0; y < height; y++) {
+          map[y] = [];
+          for (let x = 0; x < width; x++) {
+            map[y][x] = tiles[y * width + x];
+          }
+        }
+        
+        this._pendingMapData = {
+          map,
+          width,
+          height,
+          tileSize: mapData.tileSize,
+          teleporterCodes: mapData.teleporterCodes,
+          enemyConfig: mapData.enemyConfig
+        };
+        
+        console.log(`Received and processed binary map data: ${width}x${height}, ready for map change`);
+      }
+    } catch (e) {
+      console.error('Failed to process binary map data:', e);
     }
   }
   
@@ -148,6 +202,17 @@ export class Network {
         this.playerIdMap.clear();
         this.enemyIdMap.clear();
         this.bulletIdMap.clear();
+            
+        if (this._pendingMapData) {
+          message.map = this._pendingMapData.map;
+          message.mapWidth = this._pendingMapData.width;
+          message.mapHeight = this._pendingMapData.height;
+          message.tileSize = this._pendingMapData.tileSize;
+          
+          console.log(`Using pending map data: ${message.mapWidth}x${message.mapHeight}`);
+          this._pendingMapData = null;
+        }
+        
         this.emit('mapChange', message);
         break;
       

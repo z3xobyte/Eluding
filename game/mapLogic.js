@@ -7,16 +7,29 @@ class GameMap {
     this.height = mapConfig.height;
     this.tileSize = mapConfig.tileSize;
     this.enemyConfig = mapConfig.enemyConfig;
-    this.encodedMap = mapConfig.encodedMap;
-    this.tiles = MapEncoder.decodeMap(this.encodedMap, this.width, this.height);
     this.mapId = mapConfig.mapId || null;
     
+    if (mapConfig.map) {
+      this.tiles = mapConfig.map;
+    } else if (mapConfig.encodedMap) {
+      this.encodedMap = mapConfig.encodedMap;
+      this.tiles = MapEncoder.decodeMap(this.encodedMap, this.width, this.height);
+    } else {
+      console.error('No valid map data provided in map configuration');
+      this.tiles = new Array(this.height).fill(0).map(() => new Array(this.width).fill(0));
+    }
+    
     this.teleporterManager = new TeleporterManager();
+    
     this.findTeleporterTiles();
     
-    if (mapConfig.teleporterCodes) {
+    if (mapConfig.teleporterCodes && mapConfig.teleporterCodes.length > 0) {
       this.teleporterCodes = mapConfig.teleporterCodes;
       this.teleporterManager.associateTeleporterCodes(this.teleporterCodes);
+      console.log(`Initialized ${this.teleporterCodes.length} teleporters for map ${this.mapId || 'unknown'}`);
+    } else {
+      console.warn(`No teleporter codes provided for map ${this.mapId || 'unknown'}`);
+      this.teleporterCodes = [];
     }
   }
   

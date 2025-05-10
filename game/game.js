@@ -3,6 +3,7 @@ const { Enemy, Sniper, Dasher, Homing, VoidCrawler, Wall, Bullet, ENEMY_TYPES, i
 const { Player } = require('./player');
 const { Grid } = require('./grid');
 const { EnemySpawner } = require('./enemySpawner');
+const BinaryMapEncoder = require('./maps/BinaryMapEncoder');
 
 class Game {
   constructor(mapManager) {
@@ -39,6 +40,17 @@ class Game {
       }
 
       console.log(`Loading map resources for ${mapId}...`);
+      
+      console.log(`Map ${mapId} teleporter methods available:`, {
+        hasTeleporterManager: !!map.teleporterManager,
+        hasGetTeleporterMethod: typeof map.getTeleporterByCode === 'function'
+      });
+      
+      if (map.teleporterManager) {
+        console.log(`Teleporter codes for map ${mapId}:`, 
+          Array.from(map.teleporterManager.teleportersByCode.keys()));
+      }
+      
       const grid = initializeGridWithMap(map);
       this.mapGrids.set(mapId, grid);
 
@@ -253,8 +265,23 @@ class Game {
   async handlePlayerTeleport(playerId, teleporterUsed) {
     const player = this.players.get(playerId);
     if (!player) return;
-    const teleporterCode = teleporterUsed.code;
+    
     const currentMapId = player.currentMapId;
+    const map = this.mapManager.maps[currentMapId];
+    if (!map) return;
+    
+    const tileX = Math.floor(player.x / map.tileSize);
+    const tileY = Math.floor(player.y / map.tileSize);
+    
+    if (!teleporterUsed && map.isTeleporter && map.isTeleporter(tileX, tileY)) {
+      teleporterUsed = map.getTeleporter(tileX, tileY);
+    }
+    
+    if (!teleporterUsed || !teleporterUsed.code) {
+      return;
+    }
+    
+    const teleporterCode = teleporterUsed.code;
     
     console.log(`[GAME] Handling teleport for player ${playerId.substring(0, 8)} with code: ${teleporterCode}`);
 
@@ -264,7 +291,7 @@ class Game {
     }
     let destinationMapId = null;
     for (const [mapId, map] of Object.entries(this.mapManager.maps)) {
-      if (mapId !== currentMapId) {
+      if (mapId !== currentMapId && map && typeof map.getTeleporterByCode === 'function') {
         const teleporter = map.getTeleporterByCode(teleporterCode);
         if (teleporter) {
           destinationMapId = mapId;
@@ -277,9 +304,18 @@ class Game {
       console.log(`[GAME] Player ${playerId.substring(0, 8)} used teleporter with code ${teleporterCode} on ${currentMapId}, but no destination map found.`);
       return;
     }
+    
     const destinationMap = await this.loadMapIfNeeded(destinationMapId);
-    if (!destinationMap) {
-      console.error(`[GAME] Teleport failed for player ${playerId.substring(0, 8)}: Destination map ${destinationMapId} could not be loaded.`);
+    
+    console.log(`[GAME] Destination map loaded:`, {
+      mapId: destinationMapId,
+      mapExists: !!destinationMap,
+      hasTeleporterManager: destinationMap ? !!destinationMap.teleporterManager : false,
+      hasTeleporterMethod: destinationMap ? typeof destinationMap.getTeleporterByCode === 'function' : false
+    });
+    
+    if (!destinationMap || typeof destinationMap.getTeleporterByCode !== 'function') {
+      console.error(`[GAME] Teleport failed for player ${playerId.substring(0, 8)}: Destination map ${destinationMapId} could not be loaded or is invalid.`);
       return;
     }
     const targetTeleporter = destinationMap.getTeleporterByCode(teleporterCode);
@@ -311,25 +347,59 @@ class Game {
         .filter(b => b.isActive)
         .map(b => b.serialize());
       
-      const mapChangeData = {
-        type: 'mapChange',
-        newMapId: destinationMapId,
-        map: destinationMap.tiles,
-        mapWidth: destinationMap.width,
-        mapHeight: destinationMap.height,
-        tileSize: destinationMap.tileSize,
-        enemyTypes: ENEMY_TYPES,
-        enemies: serializedEnemies,
-        bullets: serializedBullets,
-        playerData: player.serialize()
-      };
-      const message = JSON.stringify(mapChangeData);
       try {
-        const compressed = zlib.gzipSync(message);
-        connection.send(compressed);
+        const mapData = {
+          width: destinationMap.width,
+          height: destinationMap.height,
+          tileSize: destinationMap.tileSize,
+          map: destinationMap.tiles,
+          teleporterCodes: destinationMap.teleporterCodes,
+          enemyConfig: destinationMap.enemyConfig
+        };
+        
+        const optimizedMapData = BinaryMapEncoder.encodeForNetwork(mapData);
+        
+        connection.send(optimizedMapData);
+        
+        const mapChangeData = {
+          type: 'mapChange',
+          newMapId: destinationMapId,
+          mapWidth: destinationMap.width,
+          mapHeight: destinationMap.height,
+          tileSize: destinationMap.tileSize,
+          enemyTypes: ENEMY_TYPES,
+          enemies: serializedEnemies,
+          bullets: serializedBullets,
+          playerData: player.serialize()
+        };
+        
+        setTimeout(() => {
+          if (connection.readyState === 1) {
+            const message = JSON.stringify(mapChangeData);
+            const compressed = zlib.gzipSync(message);
+            connection.send(compressed);
+            console.log(`[GAME] Map change message sent to player ${playerId.substring(0, 8)}`);
+          }
+        }, 50);
+        
       } catch (e) {
-        console.error("Failed to compress and send mapChange data:", e);
+        console.error("Failed to send optimized map data:", e);
+        
+        const mapChangeData = {
+          type: 'mapChange',
+          newMapId: destinationMapId,
+          map: destinationMap.tiles,
+          mapWidth: destinationMap.width,
+          mapHeight: destinationMap.height,
+          tileSize: destinationMap.tileSize,
+          enemyTypes: ENEMY_TYPES,
+          enemies: serializedEnemies,
+          bullets: serializedBullets,
+          playerData: player.serialize()
+        };
+        const message = JSON.stringify(mapChangeData);
         connection.send(message);
+        console.log(`[GAME] Traditional map data sent to player ${playerId.substring(0, 8)} (fallback)`);
       }
     }
     this._idMapNeedsUpdate = true;

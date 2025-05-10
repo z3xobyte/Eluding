@@ -4,7 +4,7 @@ export class Camera {
     this.height = height;
     this.x = 0;
     this.y = 0;
-    
+    this.zoomFactor = 1;
   }
   
   resize(width, height) {
@@ -18,16 +18,19 @@ export class Camera {
   }
   
   worldToScreen(worldX, worldY) {
+    const screenX = (worldX - this.x) * this.zoomFactor;
+    const screenY = (worldY - this.y) * this.zoomFactor;
+    
     return {
-      x: worldX - this.x,
-      y: worldY - this.y
+      x: screenX,
+      y: screenY
     };
   }
   
   screenToWorld(screenX, screenY) {
     return {
-      x: screenX + this.x,
-      y: screenY + this.y
+      x: (screenX / this.zoomFactor) + this.x,
+      y: (screenY / this.zoomFactor) + this.y
     };
   }
 } 

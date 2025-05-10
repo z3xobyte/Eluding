@@ -121,94 +121,108 @@ export class Renderer {
   }
 
   renderMap(map, mapWidth, mapHeight, tileSize, camera) {
-
+    if (!map || !Array.isArray(map) || map.length === 0) {
+      return;
+    }
+    
     const cameraChanged =
       this.lastCamera.x !== camera.x ||
       this.lastCamera.y !== camera.y ||
       this.lastCamera.width !== camera.width ||
       this.lastCamera.height !== camera.height;
 
-    if (cameraChanged) {
-      this.lastCamera = { ...camera };
-      this.dirtyCache = true;
-    }
+    const forceRedraw = !this.frameCount || this.frameCount < 5;
+    this.frameCount = (this.frameCount || 0) + 1;
 
-    if (this.dirtyCache) {
+    if (cameraChanged || this.dirtyCache || forceRedraw) {
+      this.lastCamera = { ...camera };
+
       this.offscreenCtx.fillStyle = '#333';
       this.offscreenCtx.fillRect(0, 0, this.offscreenCanvas.width, this.offscreenCanvas.height);
 
-      this.renderContiguousAreas(map, mapWidth, mapHeight, tileSize, camera, 1, 'white', this.offscreenCtx);
-      this.renderContiguousAreas(map, mapWidth, mapHeight, tileSize, camera, 2, 'darkgray', this.offscreenCtx);
-      this.renderContiguousAreas(map, mapWidth, mapHeight, tileSize, camera, 3, '#ffdd7d', this.offscreenCtx);
+      this.drawTilesByType(map, mapWidth, mapHeight, tileSize, camera, 1, 'white', this.offscreenCtx);
+      this.drawTilesByType(map, mapWidth, mapHeight, tileSize, camera, 2, 'darkgray', this.offscreenCtx);
+      this.drawTilesByType(map, mapWidth, mapHeight, tileSize, camera, 3, '#ffdd7d', this.offscreenCtx);
+      
       this.renderGridLines(map, mapWidth, mapHeight, tileSize, camera, this.offscreenCtx);
 
       this.dirtyCache = false;
     }
-
+      
     this.ctx.clearRect(0, 0, this.ctx.canvas.width, this.ctx.canvas.height);
     this.ctx.drawImage(this.offscreenCanvas, 0, 0);
   }
 
-  renderContiguousAreas(map, mapWidth, mapHeight, tileSize, camera, tileType, color, targetCtx = this.ctx) {
-    const ctx = targetCtx;
-    const startCol = Math.max(0, Math.floor(camera.x / tileSize) - 1);
-    const endCol = Math.min(mapWidth, Math.floor((camera.x + camera.width) / tileSize) + 1);
-    const startRow = Math.max(0, Math.floor(camera.y / tileSize) - 1);
-    const endRow = Math.min(mapHeight, Math.floor((camera.y + camera.height) / tileSize) + 1);
-
+  drawTilesByType(map, mapWidth, mapHeight, tileSize, camera, tileType, color, ctx) {
+    const margin = 2;
+    const visibleMinX = Math.max(0, Math.floor(camera.x / tileSize) - margin);
+    const visibleMaxX = Math.min(mapWidth - 1, Math.ceil((camera.x + camera.width) / tileSize) + margin);
+    const visibleMinY = Math.max(0, Math.floor(camera.y / tileSize) - margin);
+    const visibleMaxY = Math.min(mapHeight - 1, Math.ceil((camera.y + camera.height) / tileSize) + margin);
+    
     ctx.fillStyle = color;
-
-    for (let y = startRow; y < endRow; y++) {
-      let rowStart = -1;
-
-      for (let x = startCol; x <= endCol; x++) {
-        const currentTileType = (map[y] && x >= 0 && x < mapWidth && y >= 0 && y < mapHeight) ? map[y][x] : undefined;
-        const isMatchingTile = currentTileType === tileType;
-
-        if (isMatchingTile && rowStart === -1) {
-          rowStart = x;
-        } else if ((!isMatchingTile || x === endCol) && rowStart !== -1) {
-          const worldX = rowStart * tileSize;
+    
+    ctx.beginPath();
+    let tileCount = 0;
+    
+    for (let y = visibleMinY; y <= visibleMaxY; y++) {
+      if (!map[y]) continue;
+      
+      for (let x = visibleMinX; x <= visibleMaxX; x++) {
+        if (map[y][x] === tileType) {
+          const worldX = x * tileSize;
           const worldY = y * tileSize;
-          const blockWidthInTiles = (isMatchingTile && x === endCol) ? (x - rowStart + 1) : (x - rowStart);
-          const width = blockWidthInTiles * tileSize;
-
-          const screenPosStart = camera.worldToScreen(worldX, worldY);
-
-          if (screenPosStart.x < this.offscreenCanvas.width &&
-              screenPosStart.y < this.offscreenCanvas.height &&
-              screenPosStart.x + width > 0 &&
-              screenPosStart.y + tileSize > 0) {
-            ctx.fillRect(
-              Math.floor(screenPosStart.x),
-              Math.floor(screenPosStart.y),
-              Math.ceil(width),
-              Math.ceil(tileSize)
-            );
-            if (tileType === 3) {
-              ctx.save();
-              for (let i = 0; i < blockWidthInTiles; i++) {
-                const tileMiddleX = screenPosStart.x + (i * tileSize) + (tileSize / 2);
-                const tileMiddleY = screenPosStart.y + (tileSize / 2);
-            
-                ctx.fillStyle = '#d1b255';
-                const fontSize = Math.floor(tileSize * 0.65);
-                ctx.font = `${fontSize}px Arial`;
-                ctx.textAlign = 'center';
-                ctx.textBaseline = 'alphabetic';
-            
-                const text = '➜';
-                const metrics = ctx.measureText(text);
-                const actualHeight = metrics.actualBoundingBoxAscent + metrics.actualBoundingBoxDescent;
-                ctx.fillText(text, tileMiddleX, tileMiddleY + (metrics.actualBoundingBoxAscent - actualHeight / 2));
-              }
-              ctx.restore();
-            }
-          }
-          rowStart = -1;
+          const screenPos = camera.worldToScreen(worldX, worldY);
+          const screenSize = tileSize * camera.zoomFactor;
+          
+          ctx.rect(
+            Math.floor(screenPos.x), 
+            Math.floor(screenPos.y), 
+            Math.ceil(screenSize), 
+            Math.ceil(screenSize)
+          );
+          
+          tileCount++;
         }
       }
     }
+    
+    if (tileCount > 0) {
+      ctx.fill();
+    }
+    
+    if (tileType === 3 && tileCount > 0) {
+      ctx.save();
+      ctx.fillStyle = '#d1b255';
+      const fontSize = Math.floor(tileSize * 0.65 * camera.zoomFactor);
+      ctx.font = `${fontSize}px Arial`;
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      
+      for (let y = visibleMinY; y <= visibleMaxY; y++) {
+        if (!map[y]) continue;
+        
+        for (let x = visibleMinX; x <= visibleMaxX; x++) {
+          if (map[y][x] === 3) {
+            const tileCenter = camera.worldToScreen(
+              x * tileSize + tileSize / 2, 
+              y * tileSize + tileSize / 2
+            );
+            
+            ctx.fillText('➜', tileCenter.x, tileCenter.y);
+          }
+        }
+      }
+      ctx.restore();
+    }
+  }
+
+  renderTileType(map, mapWidth, mapHeight, tileSize, camera, tileType, color, targetCtx = this.ctx) {
+    this.drawTilesByType(map, mapWidth, mapHeight, tileSize, camera, tileType, color, targetCtx);
+  }
+
+  renderContiguousAreas(map, mapWidth, mapHeight, tileSize, camera, tileType, color, targetCtx = this.ctx) {
+    this.drawTilesByType(map, mapWidth, mapHeight, tileSize, camera, tileType, color, targetCtx);
   }
 
   renderPlayers(players, camera) {

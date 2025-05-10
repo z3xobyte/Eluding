@@ -130,6 +130,8 @@ class Game {
   setupEventListeners() {
     this.network.on('init', data => {
       this.playerId = data.id;
+
+      const startMapRender = performance.now();
       this.map = data.map;
       this.mapWidth = data.mapWidth;
       this.mapHeight = data.mapHeight;
@@ -162,10 +164,13 @@ class Game {
       }
       
       this.renderer.dirtyCache = true;
+      console.log(`Map rendering prepared in ${(performance.now() - startMapRender).toFixed(2)}ms`);
     });
 
     this.network.on('mapChange', data => {
       console.log(`Processing mapChange to ${data.newMapId}`);
+      const startMapChange = performance.now();
+      
       this.map = data.map;
       this.mapWidth = data.mapWidth;
       this.mapHeight = data.mapHeight;
@@ -196,7 +201,7 @@ class Game {
       }
       
       this.renderer.dirtyCache = true;
-      console.log("Map changed, renderer cache invalidated.");
+      console.log(`Map changed, renderer cache invalidated. Process took ${(performance.now() - startMapChange).toFixed(2)}ms`);
     });
 
     this.network.on('update', data => {
@@ -525,7 +530,6 @@ class Game {
   }
 }
 
-// Initialize the game when the DOM is loaded
 document.addEventListener('DOMContentLoaded', () => {
   new Game();
 }); 
