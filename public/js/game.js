@@ -43,7 +43,6 @@ class Game {
     this.lastUpdateTime = Date.now();
     this.deltaTime = 0;
 
-    // FPS tracking
     this.fpsDisplay = document.getElementById('fpsDisplay');
     this.frameCount = 0;
     this.lastFpsUpdate = Date.now();
@@ -526,4 +525,7 @@ class Game {
   }
 }
 
-const game = new Game(); 
+// Initialize the game when the DOM is loaded
+document.addEventListener('DOMContentLoaded', () => {
+  new Game();
+}); 

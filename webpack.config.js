@@ -16,18 +16,23 @@ const clientConfig = {
     publicPath: '/js/'
   },
   resolve: {
-    extensions: ['.js'],
+    extensions: ['.js', '.mjs'],
     modules: ['node_modules']
   },
   module: {
     rules: [
       {
-        test: /\.js$/,
-        exclude: /node_modules/,
+        test: /\.m?js$/,
+        exclude: /node_modules\/(?!(pako)\/).*/,
         use: {
           loader: 'babel-loader',
           options: {
-            presets: ['@babel/preset-env']
+            presets: [
+              ['@babel/preset-env', {
+                modules: false,
+                targets: 'defaults'
+              }]
+            ]
           }
         }
       }
@@ -57,7 +62,7 @@ const serverConfig = {
   },
   externals: [nodeExternals()],
   entry: {
-    server: './server.js'
+    server: './game_server.js'
   },
   output: {
     path: path.resolve(__dirname, 'dist'),
