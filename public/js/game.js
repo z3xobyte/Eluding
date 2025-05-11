@@ -26,7 +26,17 @@ class Game {
     this.mapWidth = 0;
     this.mapHeight = 0;
     this.tileSize = 0;
-    this.isMovementEnabled = true;
+    this.isMovementEnabled = false; // Player starts inactive
+    this.playerName = '';
+    this.isGameActive = false;
+    this.spectatorCameraX = null;
+    this.spectatorCameraY = null;
+
+    // UI Elements for name input
+    this.menuElement = document.getElementById('menu');
+    this.nameInputElement = document.getElementById('name');
+    this.playButtonElement = document.getElementById('play');
+    this.statusElement = document.getElementById('status');
     
     this.camera = new Camera(this.canvas.width, this.canvas.height);
     console.log('Camera initialized:', this.camera);
@@ -51,8 +61,48 @@ class Game {
     this.maxChatMessages = 100;
     
     this.setupEventListeners();
+    this.setupNameInput(); // Setup name input before chat, as chat might depend on name
     this.setupChat();
     this.startGameLoop();
+    
+    if (this.input) {
+      this.input.disableMovement(); // Ensure input class also knows movement is initially off
+    }
+  }
+
+  setupNameInput() {
+    if (!this.playButtonElement || !this.nameInputElement || !this.menuElement || !this.statusElement) {
+      console.error('Name input UI elements not found');
+      return;
+    }
+
+    this.playButtonElement.addEventListener('click', () => {
+      const name = this.nameInputElement.value.trim();
+      if (name && name.length > 0 && name.length <= 16) {
+        this.playerName = name;
+        this.isGameActive = true;
+        this.menuElement.style.display = 'none';
+        this.statusElement.textContent = '';
+        
+        // Notify the server that the player is joining with a name
+        this.network.send({ type: 'joinGame', name: this.playerName });
+
+        // Allow player to control movement now
+        if (this.input) {
+          // The first click on canvas will enable movement via Input.js's own toggle
+        }
+        // this.isMovementEnabled will be set by the input event listener
+        
+      } else {
+        this.statusElement.textContent = 'Please enter a name (1-16 characters).';
+      }
+    });
+
+    this.nameInputElement.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') {
+            this.playButtonElement.click();
+        }
+    });
   }
   
   resize() {
@@ -65,9 +115,14 @@ class Game {
   }
   
   setupChat() {
-    const chatInput = document.getElementById('chat-input');
-    const chatWindow = document.getElementById('chat-window');
-    const chatElement = document.getElementById('chat');
+    const chatInput = document.getElementById('sendmsg');
+    const chatWindow = document.getElementById('messages');
+    // const chatElement = document.getElementById('chat'); // This element is no longer the main container
+
+    if (!chatInput || !chatWindow) {
+      console.error('Chat UI elements #sendmsg or #messages not found');
+      return;
+    }
     
     document.addEventListener('keydown', (e) => {
       if (e.key === 'Enter' && !chatInput.matches(':focus') && 
@@ -115,12 +170,17 @@ class Game {
   }
   
   addChatMessage(sender, message) {
-    const chatWindow = document.getElementById('chat-window');
-    const messageElement = document.createElement('div');
-    messageElement.className = 'chat-message';
-    messageElement.textContent = `${sender}: ${message}`;
+    const chatWindow = document.getElementById('messages');
+    if (!chatWindow) return;
+
+    const messageElement = document.createElement('p'); // Use 'p' as per new CSS
+    // messageElement.className = 'chat-message'; // Class name if needed by CSS, but new CSS targets p
+    const displayName = sender === this.playerId ? this.playerName : sender; // Use local name for own messages if sender is just ID
+    messageElement.textContent = `${displayName}: ${message}`;
+    
     chatWindow.appendChild(messageElement);
-    chatWindow.scrollTop = chatWindow.scrollHeight;
+    // For flex-direction: column-reverse, new items at bottom, scroll to see latest (bottom)
+    chatWindow.scrollTop = chatWindow.scrollHeight; 
 
     while (chatWindow.children.length > this.maxChatMessages) {
       chatWindow.removeChild(chatWindow.firstChild);
@@ -129,7 +189,13 @@ class Game {
   
   setupEventListeners() {
     this.network.on('init', data => {
-      this.playerId = data.id;
+      // This is the initial connection data. Player might not be fully "in" the game yet.
+      // PlayerId received here might be temporary or final.
+      this.playerId = data.id; 
+      if (this.playerId && data.playerData && data.playerData.id === this.playerId) {
+          // If server sends our name back in init (e.g. reconnecting)
+          this.playerName = data.playerData.name || this.playerName;
+      }
 
       const startMapRender = performance.now();
       this.map = data.map;
@@ -142,13 +208,38 @@ class Game {
       this.enemies.clear();
       this.bullets.clear();
 
-      if (data.playerData) {
-          this.players.set(data.playerData.id, data.playerData);
-          if (data.playerData.id === this.playerId) {
-              this.camera.update(data.playerData.x, data.playerData.y, 0);
+      // Process other players first (for spectator mode)
+      if (data.players && Array.isArray(data.players)) {
+        data.players.forEach(playerData => {
+          // Ensure not to add self if by any chance it's in this list during initial spectate
+          if (playerData.id !== this.playerId || (playerData.id === this.playerId && this.isGameActive)) {
+            const pData = { ...playerData, name: playerData.name || 'Player ' + (playerData.id ? playerData.id.substring(0,4) : '???')};
+            this.players.set(playerData.id, pData);
           }
-      } else if (this.playerId) {
+        });
+      }
+
+      // Process self player data (especially after joinGame or reconnect)
+      if (data.playerData && data.playerData.id === this.playerId) {
+          const pData = { ...data.playerData, name: data.playerData.name || this.playerName || 'Player ' + (data.playerData.id ? data.playerData.id.substring(0,4) : '???')};
+          this.players.set(pData.id, pData);
+          if (this.isGameActive) { // Only center camera on self if game is active for this player
+              this.camera.update(pData.x, pData.y, 0);
+          }
+      } else if (this.playerId && this.isGameActive && !this.players.has(this.playerId)) {
+          // If game active, expecting own data but didn't get it specifically.
+          // This might happen if 'players' array in 'init' or 'mapChange' should have contained self.
+          // Or if a 'u' message is needed. For now, we can request an update.
           this.network.send({ type: 'requestIdMap' });
+      }
+      
+      // Set spectator camera if provided and not yet active
+      if (data.spectatorCameraX !== undefined && data.spectatorCameraY !== undefined && !this.isGameActive) {
+          this.spectatorCameraX = data.spectatorCameraX;
+          this.spectatorCameraY = data.spectatorCameraY;
+          if (this.camera) {
+            this.camera.update(this.spectatorCameraX, this.spectatorCameraY, 0);
+          }
       }
 
       if (data.enemies) {
@@ -182,9 +273,10 @@ class Game {
       this.bullets.clear();
 
       if (data.playerData && data.playerData.id === this.playerId) {
-        this.players.set(data.playerData.id, data.playerData);
-        if (this.camera) {
-             this.camera.update(data.playerData.x, data.playerData.y, 0);
+        const pData = { ...data.playerData, name: data.playerData.name || this.playerName || 'Player ' + (data.playerData.id ? data.playerData.id.substring(0,4) : '???')};
+        this.players.set(pData.id, pData);
+        if (this.camera && this.isGameActive) { // Only center camera if game is active
+             this.camera.update(pData.x, pData.y, 0);
         }
       }
 
@@ -213,6 +305,7 @@ class Game {
           existingPlayer.y = playerData.y;
           if (playerData.color !== undefined) existingPlayer.color = playerData.color;
           if (playerData.isDead !== undefined) existingPlayer.isDead = playerData.isDead;
+          if (playerData.name !== undefined) existingPlayer.name = playerData.name;
         } else {
           this.players.set(playerData.id, {
             id: playerData.id,
@@ -220,9 +313,10 @@ class Game {
             y: playerData.y,
             radius: playerData.radius || 25,
             color: playerData.color || '#000000',
-            isDead: playerData.isDead || false
+            isDead: playerData.isDead || false,
+            name: playerData.name || 'Player ' + (playerData.id ? playerData.id.substring(0,4) : '???')
           });
-          console.log(`Added player with ID: ${playerData.id}`);
+          // console.log(`Added player with ID: ${playerData.id}`); // Reduced logging
         }
       });
       
@@ -269,9 +363,10 @@ class Game {
                   y: ownPlayerData.y,
                   radius: ownPlayerData.radius || 25,
                   color: ownPlayerData.color || '#000000',
-                  isDead: ownPlayerData.isDead || false
+                  isDead: ownPlayerData.isDead || false,
+                  name: ownPlayerData.name || this.playerName || 'Player ' + (ownPlayerData.id ? ownPlayerData.id.substring(0,4) : '???')
               });
-              console.log(`Re-added own player ${this.playerId} during 'u' processing.`);
+              // console.log(`Re-added own player ${this.playerId} during 'u' processing.`);
           } else {
               console.warn(`Own player ${this.playerId} not found in 'u' update and not in local players map. Requesting ID map.`);
               this.network.send({ type: 'requestIdMap' });
@@ -286,6 +381,7 @@ class Game {
           existingPlayer.y = playerData.y;
           if (playerData.color !== undefined) existingPlayer.color = playerData.color;
           if (playerData.isDead !== undefined) existingPlayer.isDead = playerData.isDead;
+          if (playerData.name !== undefined) existingPlayer.name = playerData.name;
         } else {
           this.players.set(playerData.id, {
             id: playerData.id,
@@ -293,7 +389,8 @@ class Game {
             y: playerData.y,
             radius: playerData.radius || 25,
             color: playerData.color || '#000000',
-            isDead: playerData.isDead || false
+            isDead: playerData.isDead || false,
+            name: playerData.name || 'Player ' + (playerData.id ? playerData.id.substring(0,4) : '???')
           });
         }
       });
@@ -343,10 +440,16 @@ class Game {
     });
     
     this.network.on('newPlayer', data => {
-      const player = data.player;
-      if (!player.color) player.color = '#000000';
-      player.isDead = player.isDead || false;
-      this.players.set(player.id, player);
+      const newPlayerData = data.player;
+      if (!newPlayerData.color) newPlayerData.color = '#000000';
+      newPlayerData.isDead = newPlayerData.isDead || false;
+      newPlayerData.name = newPlayerData.name || 'Player ' + (newPlayerData.id ? newPlayerData.id.substring(0,4) : '???');
+      
+      this.players.set(newPlayerData.id, newPlayerData);
+      // If this newPlayer event is for ourselves after sending name
+      if (newPlayerData.id === this.playerId && !this.playerName) {
+          this.playerName = newPlayerData.name;
+      }
     });
     
     this.network.on('playerLeave', data => {
@@ -354,7 +457,7 @@ class Game {
     });
     
     this.input.on('mousemove', (x, y) => {
-      if (this.playerId && this.isMovementEnabled) {
+      if (this.isGameActive && this.playerId && this.isMovementEnabled) {
         const player = this.players.get(this.playerId);
         if (player && !player.isDead) {
           const worldX = x + this.camera.x;
@@ -365,18 +468,25 @@ class Game {
     });
     
     this.input.on('movementtoggled', (isEnabled) => {
-      this.isMovementEnabled = isEnabled;
+      if (this.isGameActive) { // Only allow movement toggling if game is active
+        this.isMovementEnabled = isEnabled;
       
-      if (!isEnabled && this.playerId) {
-        const player = this.players.get(this.playerId);
-        if (player) {
-          this.network.sendMouseMove(player.x, player.y);
+        if (!isEnabled && this.playerId) {
+          const player = this.players.get(this.playerId);
+          if (player) {
+            // Send current player position as target to stop movement if mouse was primary input
+            this.network.sendMouseMove(player.x, player.y); 
+          }
         }
+      } else {
+        // If game not active, the input event already handled disabling itself.
+        // We just need to update the game's state.
+        this.isMovementEnabled = false;
       }
     });
 
     this.network.on('respawn', data => {
-        if (this.playerId === data.id) {
+        if (this.isGameActive && this.playerId === data.id) { // Ensure game active for respawn to matter
             const player = this.players.get(this.playerId);
             if (player) {
                 player.x = data.x;
@@ -398,39 +508,61 @@ class Game {
     this.deltaTime = currentTime - this.lastUpdateTime;
     this.lastUpdateTime = currentTime;
     
+    // FPS calculation can run even if game not active
     this.frameCount++;
     if (currentTime - this.lastFpsUpdate >= 1000) {
       this.fps = this.frameCount;
       this.fpsDisplay.textContent = `FPS: ${this.fps}`;
       this.frameCount = 0;
       this.lastFpsUpdate = currentTime;
-    }
+      }
     
-    const player = this.players.get(this.playerId);
-    if (player) {
-      this.camera.update(player.x, player.y, this.deltaTime);
+      if (!this.isGameActive) {
+          // Spectator mode camera logic
+          if (this.spectatorCameraX !== null && this.spectatorCameraY !== null && this.camera) {
+              this.camera.update(this.spectatorCameraX, this.spectatorCameraY, this.deltaTime);
+          } else {
+              // Fallback if spectator coords not set: center on first other player or map center
+              const firstOtherPlayer = (this.players.size > 0) ? 
+                                       Array.from(this.players.values()).find(p => p.id !== this.playerId) || this.players.values().next().value 
+                                       : null;
+              if (firstOtherPlayer && this.camera) {
+                  this.camera.update(firstOtherPlayer.x, firstOtherPlayer.y, this.deltaTime);
+              } else if (this.mapWidth > 0 && this.mapHeight > 0 && this.camera) { // map loaded
+                   this.camera.update(this.mapWidth * this.tileSize / 2, this.mapHeight * this.tileSize / 2, this.deltaTime);
+              }
+          }
+          // No player-specific input processing or movement updates if spectating
+          return;
+      }
+
+      // If game is active for this player:
+      const player = this.players.get(this.playerId);
+      if (player && this.camera) { 
+        this.camera.update(player.x, player.y, this.deltaTime);
+      }
     }
-  }
   
   render() {
     this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
     
-    if (this.map && this.players.size > 0) {
-      const player = this.players.get(this.playerId);
-      if (player) {
-        this.renderer.renderMap(this.map, this.mapWidth, this.mapHeight, this.tileSize, this.camera);
-        this.renderer.renderPlayers(this.players, this.camera);
-        
-        const lerpAmount = Math.min(1, this.deltaTime / 100);
-        this.renderer.renderEnemies(this.enemies, this.enemies, lerpAmount, this.camera);
-        this.renderer.renderBullets(this.bullets, this.bullets, lerpAmount, this.camera);
-      } else {
-      }
+    // Render map, other players, enemies even if this client is spectating or in menu
+    if (this.map) {
+      this.renderer.renderMap(this.map, this.mapWidth, this.mapHeight, this.tileSize, this.camera);
+      
+      // Always render players and enemies if they exist, regardless of this client's active state
+      this.renderer.renderPlayers(this.players, this.camera); // Assumes Renderer handles names
+      
+      const lerpAmount = Math.min(1, this.deltaTime / 100); // deltaTime could be large if tabbed out
+      this.renderer.renderEnemies(this.enemies, this.enemies, lerpAmount, this.camera);
+      this.renderer.renderBullets(this.bullets, this.bullets, lerpAmount, this.camera);
+
+    } else if (this.network && (this.network.socket?.readyState === WebSocket.CONNECTING || this.network.socket?.readyState === WebSocket.OPEN)) {
+        // If map is null but we are connected/connecting, show loading or wait.
+        // For now, just a blank screen until map data arrives.
     } else {
-      console.log('Not rendering - map or players missing', { 
-        mapExists: !!this.map, 
-        playerCount: this.players.size 
-      });
+      // Potentially show "Connecting..." or error if map is null and not connected.
+      // console.log('Not rendering - map missing and not connected/connecting.');
     }
   }
   

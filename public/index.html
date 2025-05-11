@@ -5,29 +5,122 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Eluding</title>
   <style>
+    * {
+      font-weight: 700;
+      font-family: "Ubuntu", Arial, Helvetica, sans-serif;
+      text-decoration: none;
+    }
+
     body {
+      background-color: #333;
       margin: 0;
       padding: 0;
       overflow: hidden;
-      background-color: #333;
-      display: flex;
-      justify-content: center;
-      align-items: center;
       height: 100vh;
+      display: flex; /* Keep existing flex for canvas centering if needed */
+      justify-content: center; /* Keep existing flex for canvas centering if needed */
+      align-items: center; /* Keep existing flex for canvas centering if needed */
     }
-    canvas {
-      display: block;
-      background-color: #333;
+
+    html, body, #gameCanvas, #menu { /* Added #gameCanvas and #menu */
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      border: 0;
+      margin: 0; /* body already has margin 0, this reinforces for others */
+      padding: 0; /* body already has padding 0 */
+      width: 100%;
+      height: 100%;
+      cursor: default;
+      overflow: hidden;
+      user-select: none;
+      position: absolute; /* #menu and body are absolute, #gameCanvas might not need it if body is flex container */
+      -ms-user-select: none;
+      -moz-user-select: none;
+      -webkit-user-select: none;
     }
+    
+    #gameCanvas { /* Specific for canvas to ensure it's block and sized */
+        display: block;
+        position: absolute; /* Ensure it's under the menu */
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background-color: #333; /* Retain from original */
+    }
+
+    #menu {
+      display: block; /* Initially visible */
+      background-color: transparent; /* Game map will be the background */
+      z-index: 1001; /* Above game canvas and other elements */
+    }
+    
+    /* Centering for elements within #menu */
+    #splash, #name, #status, #play {
+      top: 50%;
+      left: 50%;
+      position: absolute;
+      text-align: center;
+      transform: translate(-50%, -50%);
+    }
+
+    #splash {
+      font-size: 50pt;
+      top: calc(50% - 100px); /* Adjusted for title */
+      color: #fff; /* From h1 style */
+      text-shadow: 0px 3px 0px #b2a98f, 0px 14px 10px #00000040; /* From h1 style */
+    }
+
+    #name { /* Input field for name */
+      border: 0;
+      width: 220px; /* Corrected from '220' to '220px' */
+      height: 30px; /* Increased height for better UX */
+      line-height: 30px; /* Vertically center text */
+      margin: 8pt auto; /* Keeps original margin */
+      text-align: center;
+      font-size: 16px; /* Readable font size */
+      /* top: 50%; left: 50%; transform: translate(-50%, -50%); Applied by group rule */
+    }
+
+    #status {
+      margin: 0;
+      top: calc(50% + 105px); /* Position status message further below play button */
+      color: #fff;
+      font-size: 12pt;
+    }
+    
+    #play { /* Play button */
+      width: 100px;
+      top: calc(50% + 65px); /* Increased top margin for spacing from name input */
+      /* left: calc(50% - 55px); If only one button, center it */
+      left: 50%; 
+      transform: translate(-50%, -50%); /* Center it */
+      padding: 10px; /* Make button more clickable */
+      font-size: 16px; /* Readable text */
+    }
+
+    button {
+      border: none;
+      cursor: pointer;
+      font-weight: bold;
+      vertical-align: text-top;
+      box-shadow: 0px 5px 7px #00000040;
+      color: #333; /* Default text color for button */
+      background-color: #ddd; /* Default background for button */
+    }
+    
     #indicators {
       position: fixed;
       top: 10px;
       right: 10px;
       display: flex;
       gap: 10px;
-      z-index: 1000;
+      z-index: 1000; /* Below menu, but above canvas */
     }
-    #pingDisplay, #fpsDisplay {
+
+    #fpsDisplay { /* Retain original FPS display styling */
       color: white;
       font-family: 'Courier New', monospace;
       font-size: 14px;
@@ -35,44 +128,108 @@
       padding: 5px 10px;
       border-radius: 3px;
     }
-    #chat {
-      width: 350px;
-      height: 250px;
-      background-color: #0009;
-      position: fixed;
-      top: 15px;
-      left: 15px;
+    
+    #ping { /* Renamed from pingDisplay, using provided CSS */
+      right: 0; /* This was for #ping container, apply to item itself or wrap */
+      margin-top: 0px; /* Original was 5px, reset if using #ping directly */
+      position: relative; /* Changed from absolute if it's inside #indicators */
+      color: white;
+      font-family: 'Courier New', monospace;
+      font-size: 14px;
+      background-color: rgba(0, 0, 0, 0.5);
+      padding: 5px 10px;
+      border-radius: 3px;
     }
-    #chat-window {
-      width: 400px;
-      height: 215px;
-      padding-bottom: 10px;
-      overflow: auto;
-    }
-    .chat-message {
+    
+    /* Chat styles adapted from provided CSS */
+    #messages { /* Chat message window */
+      position: fixed; /* Changed from original #chat */
+      left: 15px; /* Original was 20px, using old #chat value */
+      bottom: 50px; /* Adjusted to make space for input below, original was 42px */
+      width: 350px; /* Original #chat was 350px */
+      height: 198px;
+      cursor: auto;
       color: #fff;
-      margin: 5px 10px 0;
-      font: 14px Tahoma,Arial,Verdana,Segoe,sans-serif;
-    }
-    #chat-input {
-      width: 100%;
-      height:30px;
+      display: flex; 
+      flex-direction: column; /* New messages appear at bottom and scroll up */
+      overflow-y: auto;
+      padding-left: 5px;
+      user-select: text;
+      overflow-x: hidden;
+      white-space: normal;
+      -ms-user-select: text;
+      word-break: break-word;
       box-sizing: border-box;
-      position: absolute;
-      bottom: 0;
+      -moz-user-select: text;
+      -webkit-user-select: text;
+      background-color: #00000040;
+      z-index: 1000;
+    }
+
+    #messages p { /* Individual chat messages */
+      margin: 0 0 5px 5px; /* Adjusted margin */
+      font-size: 16px; /* Increased font size */
+      font-family: "Ubuntu", Tahoma, Arial, Verdana, Segoe, sans-serif; /* Prioritize Ubuntu */
+      font-weight: normal; /* Override * rule for chat messages */
+    }
+
+    #send { /* Container for chat input */
+      position: fixed; /* Changed from original #chat */
+      left: 15px; /* Original was 20px, using old #chat value */
+      bottom: 15px; /* Original was 20px, using old #chat value */
+      display: block; /* Changed from none */
+      z-index: 1000;
+    }
+
+    #sendmsg { /* Chat input field */
+      border: 0;
+      height: calc(30px - 2px); /* Original #chat-input was 30px */
+      outline-width: 0;
+      padding: 1px 2px;
+      width: 350px; /* Original #chat was 350px, input was 100% of that */
+      box-sizing: border-box;
+      font-size: 16px; /* Readable font size */
+    }
+
+    /* Scrollbar styling */
+    ::-webkit-scrollbar {
+      width: 10px;
+      height: 10px;
+    }
+    ::-webkit-scrollbar-track {
+      background: #f1f1f1;
+    }
+    ::-webkit-scrollbar-thumb {
+      background: #888;
+    }
+    ::-webkit-scrollbar-thumb:hover {
+      background: #555;
     }
   </style>
 </head>
 <body>
   <canvas id="gameCanvas"></canvas>
+
+  <div id="menu">
+    <h1 id="splash">Eluding</h1>
+    <input type="text" id="name" placeholder="Enter your name" maxlength="16">
+    <button id="play">Play</button>
+    <p id="status"></p>
+  </div>
+
   <div id="indicators">
     <div id="fpsDisplay">FPS: --</div>
-    <div id="pingDisplay">Ping: -- ms</div>
+    <div id="ping">Ping: -- ms</div>
   </div>
-  <div id="chat">
-    <div id="chat-window"></div>
-    <input type="text" id="chat-input" placeholder="Press enter to chat" style="font-size: 18px;">
+
+  <!-- Chat Area -->
+  <div id="messages">
+    <!-- Chat messages will be appended here by JS -->
   </div>
+  <div id="send">
+    <input type="text" id="sendmsg" placeholder="Press enter to chat">
+  </div>
+
   <script src="js/game.js" type="module"></script>
 </body>
 </html> 

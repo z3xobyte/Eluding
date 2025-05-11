@@ -1,5 +1,6 @@
 const zlib = require('zlib');
 const config = require('../config');
+const { ENEMY_TYPES } = require('../../game/enemy'); // Added for init data
 
 async function parseMessageContents(messageData) {
   if (Buffer.isBuffer(messageData)) {
@@ -45,12 +46,15 @@ function handlePing(ws, clientTime) {
 }
 
 function handleChatMessage(game, ws, player, message, broadcast) {
+  if (!player.currentMapId) { // Player hasn't fully joined, ignore chat attempts
+    return;
+  }
   if (message && message.trim() === '/reset') {
     handleResetCommand(game, ws, player);
   } else if (message) {
     const chatMessageObject = {
       type: 'chat',
-      sender: `Player ${player.id.substring(0, 6)}`,
+      sender: player.name, // Use player's chosen name
       message: message.substring(0, config.MAX_CHAT_MESSAGE_LENGTH)
     };
     const chatMessageString = JSON.stringify(chatMessageObject);
@@ -79,11 +83,100 @@ function handleResetCommand(game, ws, player) {
   }
 }
 
+async function handleJoinGame(game, ws, player, name, broadcast) {
+  if (player.currentMapId) { // Player already joined
+    console.warn(`Player ${player.id} sent joinGame but already in map ${player.currentMapId}`);
+    return;
+  }
+
+  player.name = name.substring(0, 16); // Set name, truncate if necessary
+
+  const initialMapId = config.DEFAULT_MAP_ID;
+  try {
+    const initialMap = game.mapManager.getMapById(initialMapId);
+    if (!initialMap) {
+      ws.close(1011, 'Server error: Default map not available.');
+      return;
+    }
+
+    await game.loadMapIfNeeded(initialMapId);
+
+    const spawnPos = initialMap.getRandomTypePosition(2);
+    if (!spawnPos) {
+      ws.close(1011, 'Server error: No spawn on default map.');
+      return;
+    }
+
+    player.x = spawnPos.x;
+    player.y = spawnPos.y;
+    // game.addPlayer will set player.currentMapId
+    await game.addPlayer(player, ws, initialMapId);
+
+    // Player is now fully added, send the complete init data
+    const playerCurrentMap = game.mapManager.getMapById(player.currentMapId); // Should be initialMap
+    if (!playerCurrentMap) {
+      await game.removePlayer(player.id);
+      ws.close(1011, 'Server error: map data unavailable for player post-join.');
+      return;
+    }
+
+    const enemiesOnPlayerMap = game.mapEnemies.get(player.currentMapId) || new Map();
+    const serializedEnemies = Array.from(enemiesOnPlayerMap.values()).map(enemy => enemy.serialize());
+
+    const fullInitDataString = JSON.stringify({
+      type: 'init', // Client already received a basic init, this one is more complete
+      id: player.id,
+      map: playerCurrentMap.tiles,
+      mapWidth: playerCurrentMap.width,
+      mapHeight: playerCurrentMap.height,
+      tileSize: playerCurrentMap.tileSize,
+      enemyTypes: ENEMY_TYPES,
+      enemies: serializedEnemies,
+      playerData: player.serialize(), // Includes name, x, y, etc.
+      status: 'joined' // Indicate player has successfully joined
+    });
+
+    game._idMapNeedsUpdate = true; // Trigger ID map update for all clients
+
+    const compressedFullInitData = zlib.gzipSync(Buffer.from(fullInitDataString));
+    ws.send(compressedFullInitData, { binary: true });
+
+    console.log(`Player ${player.name} (${player.id}) joined game on map ${player.currentMapId}.`);
+
+  } catch (error) {
+    console.error(`Error during player join game for ${player.id}:`, error);
+    if (player.id && player.currentMapId) { // If partially added
+        try { await game.removePlayer(player.id); } catch (e) { console.error('Error removing player during join failure:', e);}
+    }
+    if (ws.readyState === WebSocket.OPEN || ws.readyState === WebSocket.CONNECTING) {
+      ws.close(1011, 'Server error during game join.');
+    }
+  }
+}
+
 async function handlePlayerMessage(game, ws, player, rawMessage, broadcast) {
   try {
     const data = await parseMessageContents(rawMessage);
     
-    if (data.type === 'm') {
+    // Player must be fully joined for most messages
+    if (!player.currentMapId && data.type !== 'joinGame' && data.type !== 'ping') {
+      // Allow ping even before joining, but not much else
+      if (data.type === 'ping') {
+        handlePing(ws, data.time);
+      } else {
+        console.warn(`Player ${player.id} sent message type ${data.type} before joining game.`);
+      }
+      return;
+    }
+
+    if (data.type === 'joinGame') {
+      if (data.name && typeof data.name === 'string') {
+        await handleJoinGame(game, ws, player, data.name, broadcast);
+      } else {
+        console.warn(`Player ${player.id} sent invalid joinGame message.`);
+        ws.close(1003, 'Invalid join game message.');
+      }
+    } else if (data.type === 'm') {
       handleMouseMove(game, player.id, data.x, data.y);
     } else if (data.type === 'ping') {
       handlePing(ws, data.time);

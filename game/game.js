@@ -14,6 +14,7 @@ const { Player } = require("./player");
 const { Grid } = require("./grid");
 const { EnemySpawner } = require("./enemySpawner");
 const BinaryMapEncoder = require("./maps/BinaryMapEncoder");
+const config = require("../server/config"); // Added for DEFAULT_MAP_ID
 
 class Game {
   constructor(mapManager) {
@@ -513,63 +514,76 @@ class Game {
       }
     }
 
-    for (const [playerId, connection] of this.connections) {
+    for (const [currentConnectionPlayerId, connection] of this.connections) {
       if (connection.readyState !== 1) continue;
 
-      const player = this.players.get(playerId);
-      if (!player) continue;
+      let mapIdToBroadcast;
+      const activePlayer = this.players.get(currentConnectionPlayerId);
 
-      const playerMapId = player.currentMapId;
+      if (activePlayer) {
+        mapIdToBroadcast = activePlayer.currentMapId;
+      } else {
+        // This connection is a spectator (in this.connections but not yet in this.players)
+        mapIdToBroadcast = config.DEFAULT_MAP_ID;
+      }
+      
+      if (!mapIdToBroadcast) {
+          // This might happen if DEFAULT_MAP_ID is somehow not set or an active player has no currentMapId
+          console.warn(`No mapIdToBroadcast determined for connection ${currentConnectionPlayerId}. Active player: ${!!activePlayer}`);
+          continue;
+      }
 
       const playersOnThisMap = [];
-      for (const p of this.players.values()) {
-        if (p.currentMapId === playerMapId) {
+      for (const p of this.players.values()) { // Iterate all fully active players
+        if (p.currentMapId === mapIdToBroadcast) {
           playersOnThisMap.push(p);
         }
       }
 
-      const enemiesToSerialise = this.mapEnemies.get(playerMapId) || new Map();
-      const bulletsToSerialise = this.mapBullets.get(playerMapId) || new Map();
+      const enemiesToSerialise = this.mapEnemies.get(mapIdToBroadcast) || new Map();
+      const bulletsToSerialise = this.mapBullets.get(mapIdToBroadcast) || new Map();
 
       const gameState = {
         t: "u",
-        p: playersOnThisMap.map((p) => [
-          this._cachedPlayerIds.get(p.id) || p.id,
-          Math.round(p.x),
-          Math.round(p.y),
-          p.isDead ? 1 : 0,
+        p: playersOnThisMap.map((p_data) => [ // p_data is a player object from playersOnThisMap
+          this._cachedPlayerIds.get(p_data.id) || p_data.id,
+          Math.round(p_data.x),
+          Math.round(p_data.y),
+          p_data.isDead ? 1 : 0,
+          p_data.name,
         ]),
-        e: Array.from(enemiesToSerialise.values()).map((e) => [
-          this._cachedEnemyIds.get(e.id) || e.id,
-          e.type,
-          Math.round(e.x),
-          Math.round(e.y),
-          e.radius,
+        e: Array.from(enemiesToSerialise.values()).map((e_data) => [
+          this._cachedEnemyIds.get(e_data.id) || e_data.id,
+          e_data.type,
+          Math.round(e_data.x),
+          Math.round(e_data.y),
+          e_data.radius,
         ]),
         b: Array.from(bulletsToSerialise.values())
-          .filter((b) => b.isActive)
-          .map((b) => [
-            this._cachedBulletIds.get(b.id) || b.id,
-            Math.round(b.x),
-            Math.round(b.y),
-            b.radius,
+          .filter((b_data) => b_data.isActive)
+          .map((b_data) => [
+            this._cachedBulletIds.get(b_data.id) || b_data.id,
+            Math.round(b_data.x),
+            Math.round(b_data.y),
+            b_data.radius,
           ]),
       };
 
       if (needsFullIdMapForAll) {
         gameState.idMap = { p: {}, e: {}, b: {} };
-        for (const p of playersOnThisMap) {
-          const shortId = this._cachedPlayerIds.get(p.id);
-          if (shortId) gameState.idMap.p[shortId] = p.id;
+        // Populate idMap based on entities on mapIdToBroadcast
+        for (const p_data of playersOnThisMap) {
+          const shortId = this._cachedPlayerIds.get(p_data.id);
+          if (shortId) gameState.idMap.p[shortId] = p_data.id;
         }
-        for (const e of enemiesToSerialise.values()) {
-          const shortId = this._cachedEnemyIds.get(e.id);
-          if (shortId) gameState.idMap.e[shortId] = e.id;
+        for (const e_data of enemiesToSerialise.values()) {
+          const shortId = this._cachedEnemyIds.get(e_data.id);
+          if (shortId) gameState.idMap.e[shortId] = e_data.id;
         }
-        for (const b of bulletsToSerialise.values()) {
-          if (!b.isActive) continue;
-          const shortId = this._cachedBulletIds.get(b.id);
-          if (shortId) gameState.idMap.b[shortId] = b.id;
+        for (const b_data of bulletsToSerialise.values()) {
+          if (!b_data.isActive) continue;
+          const shortId = this._cachedBulletIds.get(b_data.id);
+          if (shortId) gameState.idMap.b[shortId] = b_data.id;
         }
       }
 
@@ -578,7 +592,7 @@ class Game {
         const compressed = zlib.gzipSync(message);
         connection.send(compressed);
       } catch (e) {
-        console.error("Failed to compress and send game state:", e);
+        console.error("Failed to compress and send game state to " + currentConnectionPlayerId + ":", e);
       }
     }
     if (needsFullIdMapForAll) {

@@ -236,7 +236,8 @@ export class Network {
               id: this.playerIdMap.get(p_arr[0]) || p_arr[0].toString(),
               x: p_arr[1],
               y: p_arr[2],
-              isDead: p_arr[3] === 1
+              isDead: p_arr[3] === 1,
+              name: p_arr[4] // Assuming name is the 5th element (index 4)
             })) : [],
             enemies: message.e ? message.e.map(e_arr => ({
               id: this.enemyIdMap.get(e_arr[0]) || e_arr[0].toString(),

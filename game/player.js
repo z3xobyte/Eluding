@@ -2,8 +2,9 @@ const { v4: uuidv4 } = require("uuid");
 const SAT = require("sat"); // Import SAT.js library
 
 class Player {
-  constructor(x, y, radius, color) {
+  constructor(x, y, radius, color, name = null) {
     this.id = uuidv4();
+    this.name = name || `Player ${this.id.substring(0, 4)}`;
     this.x = x;
     this.y = y;
     this.radius = radius;
@@ -380,6 +381,7 @@ class Player {
       color: this.color,
       isDead: this.isDead,
       currentMapId: this.currentMapId,
+      name: this.name,
     };
   }
 }
