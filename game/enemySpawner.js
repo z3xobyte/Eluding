@@ -9,12 +9,12 @@ class EnemySpawner {
 
   spawnEnemiesForMap(mapId, map, grid) {
     if (!map || !grid) {
-      console.error(`Cannot spawn enemies for ${mapId}, map or grid missing.`);
+      console.error(`cannot spawn enemies for ${mapId} map or grid missing.`);
       return;
     }
     const enemiesOnThisMap = this.mapEnemies.get(mapId);
     if (!enemiesOnThisMap) {
-      console.error(`Enemy map not initialized for ${mapId}`);
+      console.error(`enemy map not initialized for ${mapId}`);
       return;
     }
 

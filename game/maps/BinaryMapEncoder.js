@@ -9,7 +9,6 @@ class BinaryMapEncoder {
     headerBuffer.writeUInt32LE(mapData.width, 0);
     headerBuffer.writeUInt32LE(mapData.height, 4);
     headerBuffer.writeUInt32LE(mapData.tileSize, 8);
-    
     headerBuffer.writeUInt32LE(0, 12);
     
     const tileBuffer = Buffer.alloc(mapData.width * mapData.height);

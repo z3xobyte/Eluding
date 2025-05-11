@@ -32,31 +32,31 @@ class Grid {
     this.maxCellY = this.cellsY - 1;
 
     this.cells = new Array(this.cellsX * this.cellsY);
-    for(let i = 0; i < this.cells.length; ++i) {
-        this.cells[i] = {
-            entities: new Set(),
-            isWall: false,
-            isSafeZone: false,
-            isTeleporter: false,
-            teleporterInfo: null
-        };
+    for (let i = 0; i < this.cells.length; ++i) {
+      this.cells[i] = {
+        entities: new Set(),
+        isWall: false,
+        isSafeZone: false,
+        isTeleporter: false,
+        teleporterInfo: null,
+      };
     }
     this.entities = new Map();
   }
 
   getCellIndex(x, y) {
     let cellX = ~~(x * this.inverseCellSize);
-    cellX = cellX < 0 ? 0 : (cellX > this.maxCellX ? this.maxCellX : cellX);
+    cellX = cellX < 0 ? 0 : cellX > this.maxCellX ? this.maxCellX : cellX;
     let cellY = ~~(y * this.inverseCellSize);
-    cellY = cellY < 0 ? 0 : (cellY > this.maxCellY ? this.maxCellY : cellY);
+    cellY = cellY < 0 ? 0 : cellY > this.maxCellY ? this.maxCellY : cellY;
     return cellX * this.cellsY + cellY;
   }
 
   getCellCoords(x, y) {
     let cellX = ~~(x * this.inverseCellSize);
-    cellX = cellX < 0 ? 0 : (cellX > this.maxCellX ? this.maxCellX : cellX);
+    cellX = cellX < 0 ? 0 : cellX > this.maxCellX ? this.maxCellX : cellX;
     let cellY = ~~(y * this.inverseCellSize);
-    cellY = cellY < 0 ? 0 : (cellY > this.maxCellY ? this.maxCellY : cellY);
+    cellY = cellY < 0 ? 0 : cellY > this.maxCellY ? this.maxCellY : cellY;
     return { x: cellX, y: cellY };
   }
 
@@ -91,10 +91,20 @@ class Grid {
         const maxCellXBoundary = ~~((worldMaxX - 0.0001) * invCellSize);
         const maxCellYBoundary = ~~((worldMaxY - 0.0001) * invCellSize);
 
-        const gridMinX = minCellX < 0 ? 0 : (minCellX > maxCX ? maxCX : minCellX);
-        const gridMinY = minCellY < 0 ? 0 : (minCellY > maxCY ? maxCY : minCellY);
-        const gridMaxX = maxCellXBoundary < 0 ? 0 : (maxCellXBoundary > maxCX ? maxCX : maxCellXBoundary);
-        const gridMaxY = maxCellYBoundary < 0 ? 0 : (maxCellYBoundary > maxCY ? maxCY : maxCellYBoundary);
+        const gridMinX = minCellX < 0 ? 0 : minCellX > maxCX ? maxCX : minCellX;
+        const gridMinY = minCellY < 0 ? 0 : minCellY > maxCY ? maxCY : minCellY;
+        const gridMaxX =
+          maxCellXBoundary < 0
+            ? 0
+            : maxCellXBoundary > maxCX
+              ? maxCX
+              : maxCellXBoundary;
+        const gridMaxY =
+          maxCellYBoundary < 0
+            ? 0
+            : maxCellYBoundary > maxCY
+              ? maxCY
+              : maxCellYBoundary;
 
         for (let cX = gridMinX; cX <= gridMaxX; cX++) {
           for (let cY = gridMinY; cY <= gridMaxY; cY++) {
@@ -112,7 +122,7 @@ class Grid {
                   tileX,
                   tileY,
                   code: teleporter.code,
-                  mapId: teleporter.mapId
+                  mapId: teleporter.mapId,
                 };
               }
             }
@@ -131,29 +141,34 @@ class Grid {
     const entityId = entity.id;
 
     let minX = ~~((entity.x - entityRadius) * invCellSize);
-    minX = minX < 0 ? 0 : (minX > maxCX ? maxCX : minX);
+    minX = minX < 0 ? 0 : minX > maxCX ? maxCX : minX;
     let minY = ~~((entity.y - entityRadius) * invCellSize);
-    minY = minY < 0 ? 0 : (minY > maxCY ? maxCY : minY);
+    minY = minY < 0 ? 0 : minY > maxCY ? maxCY : minY;
     let maxX = ~~((entity.x + entityRadius) * invCellSize);
-    maxX = maxX < 0 ? 0 : (maxX > maxCX ? maxCX : maxX);
+    maxX = maxX < 0 ? 0 : maxX > maxCX ? maxCX : maxX;
     let maxY = ~~((entity.y + entityRadius) * invCellSize);
-    maxY = maxY < 0 ? 0 : (maxY > maxCY ? maxCY : maxY);
+    maxY = maxY < 0 ? 0 : maxY > maxCY ? maxCY : maxY;
 
     const cellIndices = [];
     const currentCells = this.cells;
 
     if (maxX >= minX && maxY >= minY) {
-        for (let x = minX; x <= maxX; x++) {
-          for (let y = minY; y <= maxY; y++) {
-            const cellIndex = x * cellsYCount + y;
-            currentCells[cellIndex].entities.add(entityId);
-            cellIndices.push(cellIndex);
-          }
+      for (let x = minX; x <= maxX; x++) {
+        for (let y = minY; y <= maxY; y++) {
+          const cellIndex = x * cellsYCount + y;
+          currentCells[cellIndex].entities.add(entityId);
+          cellIndices.push(cellIndex);
         }
+      }
     }
 
     this.entities.set(entityId, {
-      entity, minX, minY, maxX, maxY, cellIndices
+      entity,
+      minX,
+      minY,
+      maxX,
+      maxY,
+      cellIndices,
     });
     return cellIndices;
   }
@@ -193,26 +208,31 @@ class Grid {
     const currentCells = this.cells;
 
     let newMinX = ~~((entity.x - entityRadius) * invCellSize);
-    newMinX = newMinX < 0 ? 0 : (newMinX > maxCX ? maxCX : newMinX);
+    newMinX = newMinX < 0 ? 0 : newMinX > maxCX ? maxCX : newMinX;
     let newMinY = ~~((entity.y - entityRadius) * invCellSize);
-    newMinY = newMinY < 0 ? 0 : (newMinY > maxCY ? maxCY : newMinY);
+    newMinY = newMinY < 0 ? 0 : newMinY > maxCY ? maxCY : newMinY;
     let newMaxX = ~~((entity.x + entityRadius) * invCellSize);
-    newMaxX = newMaxX < 0 ? 0 : (newMaxX > maxCX ? maxCX : newMaxX);
+    newMaxX = newMaxX < 0 ? 0 : newMaxX > maxCX ? maxCX : newMaxX;
     let newMaxY = ~~((entity.y + entityRadius) * invCellSize);
-    newMaxY = newMaxY < 0 ? 0 : (newMaxY > maxCY ? maxCY : newMaxY);
+    newMaxY = newMaxY < 0 ? 0 : newMaxY > maxCY ? maxCY : newMaxY;
 
-    if (newMinX === oldMinX && newMinY === oldMinY && newMaxX === oldMaxX && newMaxY === oldMaxY) {
+    if (
+      newMinX === oldMinX &&
+      newMinY === oldMinY &&
+      newMaxX === oldMaxX &&
+      newMaxY === oldMaxY
+    ) {
       entityData.entity = entity;
       return oldCellIndices;
     }
 
     const newCellIndicesArray = [];
     if (newMaxX >= newMinX && newMaxY >= newMinY) {
-        for (let x = newMinX; x <= newMaxX; x++) {
-          for (let y = newMinY; y <= newMaxY; y++) {
-            newCellIndicesArray.push(x * cellsYCount + y);
-          }
+      for (let x = newMinX; x <= newMaxX; x++) {
+        for (let y = newMinY; y <= newMaxY; y++) {
+          newCellIndicesArray.push(x * cellsYCount + y);
         }
+      }
     }
 
     const oldCellIndicesSet = new Set(oldCellIndices);
@@ -221,16 +241,16 @@ class Grid {
     for (const cellIndex of oldCellIndicesSet) {
       if (!newCellIndicesSet.has(cellIndex)) {
         if (currentCells[cellIndex]) {
-             currentCells[cellIndex].entities.delete(entityId);
+          currentCells[cellIndex].entities.delete(entityId);
         }
       }
     }
 
     for (const cellIndex of newCellIndicesSet) {
       if (!oldCellIndicesSet.has(cellIndex)) {
-         if (currentCells[cellIndex]){
-            currentCells[cellIndex].entities.add(entityId);
-         }
+        if (currentCells[cellIndex]) {
+          currentCells[cellIndex].entities.add(entityId);
+        }
       }
     }
 
@@ -243,7 +263,6 @@ class Grid {
 
     return newCellIndicesArray;
   }
-
 
   getNearbyEntities(entity) {
     const entityData = this.entities.get(entity.id);
@@ -277,13 +296,17 @@ class Grid {
     const radiusInCells = Math.ceil(checkRadius * invCellSize);
 
     let minTestCellX = entityCellX - radiusInCells;
-    minTestCellX = minTestCellX < 0 ? 0 : (minTestCellX > maxCX ? maxCX : minTestCellX);
+    minTestCellX =
+      minTestCellX < 0 ? 0 : minTestCellX > maxCX ? maxCX : minTestCellX;
     let minTestCellY = entityCellY - radiusInCells;
-    minTestCellY = minTestCellY < 0 ? 0 : (minTestCellY > maxCY ? maxCY : minTestCellY);
+    minTestCellY =
+      minTestCellY < 0 ? 0 : minTestCellY > maxCY ? maxCY : minTestCellY;
     let maxTestCellX = entityCellX + radiusInCells;
-    maxTestCellX = maxTestCellX > maxCX ? maxCX : (maxTestCellX < 0 ? 0 : maxTestCellX);
+    maxTestCellX =
+      maxTestCellX > maxCX ? maxCX : maxTestCellX < 0 ? 0 : maxTestCellX;
     let maxTestCellY = entityCellY + radiusInCells;
-    maxTestCellY = maxTestCellY > maxCY ? maxCY : (maxTestCellY < 0 ? 0 : maxTestCellY);
+    maxTestCellY =
+      maxTestCellY > maxCY ? maxCY : maxTestCellY < 0 ? 0 : maxTestCellY;
 
     const entityWorldMinX = checkX - checkRadius;
     const entityWorldMinY = checkY - checkRadius;
@@ -301,10 +324,12 @@ class Grid {
           const cellWorldMaxX = cellWorldMinX + cSize;
           const cellWorldMaxY = cellWorldMinY + cSize;
 
-          if (entityWorldMinX < cellWorldMaxX &&
-              entityWorldMaxX > cellWorldMinX &&
-              entityWorldMinY < cellWorldMaxY &&
-              entityWorldMaxY > cellWorldMinY) {
+          if (
+            entityWorldMinX < cellWorldMaxX &&
+            entityWorldMaxX > cellWorldMinX &&
+            entityWorldMinY < cellWorldMaxY &&
+            entityWorldMaxY > cellWorldMinY
+          ) {
             return true;
           }
         }
@@ -315,17 +340,29 @@ class Grid {
 
   checkWallCollision(entity) {
     const radius = entity.radius || 0;
-    if (entity.x - radius < 0 ||
-        entity.x + radius > this.width ||
-        entity.y - radius < -2 ||
-        entity.y + radius > this.height) {
+    if (
+      entity.x - radius < 0 ||
+      entity.x + radius > this.width ||
+      entity.y - radius < -2 ||
+      entity.y + radius > this.height
+    ) {
       return true;
     }
-    return this._checkOverlapWithCellProperty(entity.x, entity.y, radius, (cell) => cell.isWall);
+    return this._checkOverlapWithCellProperty(
+      entity.x,
+      entity.y,
+      radius,
+      (cell) => cell.isWall,
+    );
   }
 
   checkSafeZoneCollision(entity) {
-    return this._checkOverlapWithCellProperty(entity.x, entity.y, entity.radius || 0, (cell) => cell.isSafeZone);
+    return this._checkOverlapWithCellProperty(
+      entity.x,
+      entity.y,
+      entity.radius || 0,
+      (cell) => cell.isSafeZone,
+    );
   }
 
   queryArea(x, y, radius) {
@@ -336,31 +373,31 @@ class Grid {
     const cellsYCount = this.cellsY;
 
     let minX = ~~((x - entityRadius) * invCellSize);
-    minX = minX < 0 ? 0 : (minX > maxCX ? maxCX : minX);
+    minX = minX < 0 ? 0 : minX > maxCX ? maxCX : minX;
     let minY = ~~((y - entityRadius) * invCellSize);
-    minY = minY < 0 ? 0 : (minY > maxCY ? maxCY : minY);
+    minY = minY < 0 ? 0 : minY > maxCY ? maxCY : minY;
     let maxX = ~~((x + entityRadius) * invCellSize);
-    maxX = maxX < 0 ? 0 : (maxX > maxCX ? maxCX : maxX);
+    maxX = maxX < 0 ? 0 : maxX > maxCX ? maxCX : maxX;
     let maxY = ~~((y + entityRadius) * invCellSize);
-    maxY = maxY < 0 ? 0 : (maxY > maxCY ? maxCY : maxY);
+    maxY = maxY < 0 ? 0 : maxY > maxCY ? maxCY : maxY;
 
     const entityIds = new Set();
     const currentCells = this.cells;
     if (maxX >= minX && maxY >= minY) {
-        for (let cellXLoop = minX; cellXLoop <= maxX; cellXLoop++) {
-          for (let cellYLoop = minY; cellYLoop <= maxY; cellYLoop++) {
-            const cellIndex = cellXLoop * cellsYCount + cellYLoop;
-            for (const id of currentCells[cellIndex].entities) {
-              entityIds.add(id);
-            }
+      for (let cellXLoop = minX; cellXLoop <= maxX; cellXLoop++) {
+        for (let cellYLoop = minY; cellYLoop <= maxY; cellYLoop++) {
+          const cellIndex = cellXLoop * cellsYCount + cellYLoop;
+          for (const id of currentCells[cellIndex].entities) {
+            entityIds.add(id);
           }
         }
+      }
     }
     return Array.from(entityIds);
   }
 
   clear() {
-    this.cells.forEach(cell => {
+    this.cells.forEach((cell) => {
       cell.entities.clear();
     });
     this.entities.clear();
@@ -375,13 +412,15 @@ class Grid {
       if (size > 0) {
         occupiedCells++;
         if (size > maxEntitiesInCell) {
-            maxEntitiesInCell = size;
+          maxEntitiesInCell = size;
         }
       }
     }
     return {
-      totalEntities, occupiedCells, maxEntitiesInCell,
-      totalCells: this.cellsX * this.cellsY
+      totalEntities,
+      occupiedCells,
+      maxEntitiesInCell,
+      totalCells: this.cellsX * this.cellsY,
     };
   }
 
@@ -399,46 +438,45 @@ class Grid {
 
   isValidSpawnPosition(x, y, radius) {
     const rad = radius || 0;
-    if (x - rad < 0 ||
-        x + rad > this.width ||
-        y - rad < 0 ||
-        y + rad > this.height) {
+    if (
+      x - rad < 0 ||
+      x + rad > this.width ||
+      y - rad < 0 ||
+      y + rad > this.height
+    ) {
       return false;
     }
-    return !this._checkOverlapWithCellProperty(x, y, rad, (cell) => cell.isWall || cell.isSafeZone || cell.isTeleporter);
+    return !this._checkOverlapWithCellProperty(
+      x,
+      y,
+      rad,
+      (cell) => cell.isWall || cell.isSafeZone || cell.isTeleporter,
+    );
   }
 
   checkTeleporterCollision(entity) {
     const x = entity.x;
     const y = entity.y;
     const radius = entity.radius || 0;
-    const currentCells = this.cells;
-    const cellsLength = currentCells.length;
 
-    const centerCellIndex = this.getCellIndex(x, y);
-    if (centerCellIndex >= 0 && centerCellIndex < cellsLength && currentCells[centerCellIndex].isTeleporter) {
-      return true;
-    }
-
-    const cosAngles = Grid.ANGLES_COS_8;
-    const sinAngles = Grid.ANGLES_SIN_8;
-
-    for (let i = 0; i < Grid.NUM_POINTS_8; i++) {
-      const px = x + cosAngles[i] * radius;
-      const py = y + sinAngles[i] * radius;
-      const cellIndex = this.getCellIndex(px, py);
-      if (cellIndex >= 0 && cellIndex < cellsLength && currentCells[cellIndex].isTeleporter) {
-        return true;
-      }
-    }
-    return false;
+    // Use the same approach as _checkOverlapWithCellProperty
+    return this._checkOverlapWithCellProperty(
+      x,
+      y,
+      radius,
+      (cell) => cell.isTeleporter,
+    );
   }
-
   getTeleporterAt(x, y) {
     let cellX = ~~(x * this.inverseCellSize);
     let cellY = ~~(y * this.inverseCellSize);
 
-    if (cellX < 0 || cellX > this.maxCellX || cellY < 0 || cellY > this.maxCellY) {
+    if (
+      cellX < 0 ||
+      cellX > this.maxCellX ||
+      cellY < 0 ||
+      cellY > this.maxCellY
+    ) {
       return null;
     }
     const cellIndex = cellX * this.cellsY + cellY;
@@ -450,29 +488,12 @@ class Grid {
   }
 
   isFullyOutsideTeleporter(entity) {
-    const x = entity.x;
-    const y = entity.y;
-    const radius = entity.radius || 0;
-    const currentCells = this.cells;
-    const cellsLength = currentCells.length;
-
-    const centerCellIndex = this.getCellIndex(x, y);
-    if (centerCellIndex >= 0 && centerCellIndex < cellsLength && currentCells[centerCellIndex].isTeleporter) {
-      return false;
-    }
-
-    const cosAngles = Grid.ANGLES_COS_12;
-    const sinAngles = Grid.ANGLES_SIN_12;
-
-    for (let i = 0; i < Grid.NUM_POINTS_12; i++) {
-      const px = x + cosAngles[i] * radius;
-      const py = y + sinAngles[i] * radius;
-      const cellIndex = this.getCellIndex(px, py);
-      if (cellIndex >= 0 && cellIndex < cellsLength && currentCells[cellIndex].isTeleporter) {
-        return false;
-      }
-    }
-    return true;
+    return !this._checkOverlapWithCellProperty(
+      entity.x,
+      entity.y,
+      entity.radius || 0,
+      (cell) => cell.isTeleporter,
+    );
   }
 
   isFullyInsideTeleporter(entity) {
@@ -485,22 +506,41 @@ class Grid {
     const y = entity.y;
     const radius = entity.radius || 0;
     const centerCode = centerTeleporterInfo.code;
+    const invCellSize = this.inverseCellSize;
+    const cellsYCount = this.cellsY;
 
-    const cosAngles = Grid.ANGLES_COS_12;
-    const sinAngles = Grid.ANGLES_SIN_12;
+    const minX = Math.floor((x - radius) * invCellSize);
+    const minY = Math.floor((y - radius) * invCellSize);
+    const maxX = Math.floor((x + radius) * invCellSize);
+    const maxY = Math.floor((y + radius) * invCellSize);
 
-    for (let i = 0; i < Grid.NUM_POINTS_12; i++) {
-      const px = x + cosAngles[i] * radius;
-      const py = y + sinAngles[i] * radius;
-      const pointTeleporterInfo = this.getTeleporterAt(px, py);
-      if (!pointTeleporterInfo || pointTeleporterInfo.code !== centerCode) {
-        return false;
+    for (let cx = minX; cx <= maxX; cx++) {
+      for (let cy = minY; cy <= maxY; cy++) {
+        const cellCenterX = (cx + 0.5) * this.cellSize;
+        const cellCenterY = (cy + 0.5) * this.cellSize;
+        const distSq =
+          (cellCenterX - x) * (cellCenterX - x) +
+          (cellCenterY - y) * (cellCenterY - y);
+        const testRadius = radius + Math.sqrt(2) * (this.cellSize / 2);
+
+        if (distSq > testRadius * testRadius) continue;
+
+        const cellIndex = cx * cellsYCount + cy;
+        if (cellIndex < 0 || cellIndex >= this.cells.length) continue;
+
+        const cell = this.cells[cellIndex];
+        if (
+          !cell.isTeleporter ||
+          !cell.teleporterInfo ||
+          cell.teleporterInfo.code !== centerCode
+        ) {
+          return false;
+        }
       }
     }
     return true;
   }
 }
-
-if (typeof module !== 'undefined' && module.exports) {
+if (typeof module !== "undefined" && module.exports) {
   module.exports = Grid;
 }
