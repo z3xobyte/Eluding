@@ -346,8 +346,9 @@ class Game {
         }
       }
 
-      if (this.players.size > 0 && this.playerId) {
+      if (this.players.size > 0 && this.playerId && this.isGameActive) {
         if (!this.players.has(this.playerId)) {
+          // Only request if game is active and we are missing our own player data
           this.network.send({ type: 'requestIdMap' });
         }
       }
@@ -367,8 +368,8 @@ class Game {
                   name: ownPlayerData.name || this.playerName || 'Player ' + (ownPlayerData.id ? ownPlayerData.id.substring(0,4) : '???')
               });
               // console.log(`Re-added own player ${this.playerId} during 'u' processing.`);
-          } else {
-              console.warn(`Own player ${this.playerId} not found in 'u' update and not in local players map. Requesting ID map.`);
+          } else if (this.isGameActive) { // Only request if game is active
+              console.warn(`Own player ${this.playerId} not found in 'u' update (and game is active). Requesting ID map.`);
               this.network.send({ type: 'requestIdMap' });
           }
       }

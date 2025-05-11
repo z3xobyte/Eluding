@@ -445,16 +445,15 @@ class Game {
           playerData: player.serialize(),
         };
 
-        setTimeout(() => {
-          if (connection.readyState === 1) {
-            const message = JSON.stringify(mapChangeData);
-            const compressed = zlib.gzipSync(message);
-            connection.send(compressed);
-            console.log(
-              `[GAME] Map change message sent to player ${playerId.substring(0, 8)}`,
-            );
-          }
-        }, 50);
+        // Send mapChangeData immediately
+        if (connection.readyState === 1) {
+          const message = JSON.stringify(mapChangeData);
+          const compressed = zlib.gzipSync(message);
+          connection.send(compressed);
+          console.log(
+            `[GAME] Map change message sent to player ${playerId.substring(0, 8)}`,
+          );
+        }
       } catch (e) {
         console.error("Failed to send optimized map data:", e);
 
