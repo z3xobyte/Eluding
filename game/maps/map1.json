@@ -6,7 +6,7 @@
     "spawnTileType": 1,
     "types": {
       "basic": {
-        "count": 30,
+        "count": 0,
         "radius": 15,
         "minSpeed": 4,
         "maxSpeed": 5
@@ -55,6 +55,16 @@
         "moveClockwise": true,
         "patternAlternate": false,
         "initialSide": 0
+      },
+      "recursive_bullet_boss": {
+        "count": 1,
+        "radius": 25,
+        "minSpeed": 0.5,
+        "maxSpeed": 1.0,
+        "shootCooldown": 10,
+        "bulletRadius": 12,
+        "bulletSpeed": 50,
+        "recursionLevels": 2
       }
     }
   },

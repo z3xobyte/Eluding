@@ -6,7 +6,7 @@ const { handlePlayerMessage } = require('./messageHandler');
 
 async function handleNewConnection(ws, req, game, broadcast) {
   // Create a player object in a "pending" state. It has an ID but is not yet in the game.
-  const player = new Player(0, 0, 25, "#000000"); // x, y are temporary, name will be set later
+  const player = new Player(0, 0, 25, "#FFFFFF"); // x, y are temporary, name will be set later
 
   try {
     const initialMapId = config.DEFAULT_MAP_ID;

@@ -393,7 +393,7 @@ class Game {
             x: playerData.x,
             y: playerData.y,
             radius: playerData.radius || 25,
-            color: playerData.color || "#000000",
+            color: playerData.color || "#FFFFFF",
             isDead: playerData.isDead || false,
             name:
               playerData.name ||
@@ -475,7 +475,7 @@ class Game {
               x: ownPlayerDataFromUpdate.x,
               y: ownPlayerDataFromUpdate.y,
               radius: ownPlayerDataFromUpdate.radius || 25,
-              color: ownPlayerDataFromUpdate.color || "#000000",
+              color: ownPlayerDataFromUpdate.color || "#FFFFFF",
               isDead: ownPlayerDataFromUpdate.isDead || false,
               name:
                 ownPlayerDataFromUpdate.name ||
@@ -523,7 +523,7 @@ class Game {
             x: playerData.x,
             y: playerData.y,
             radius: playerData.radius || 25,
-            color: playerData.color || "#000000",
+            color: playerData.color || "#FFFFFF",
             isDead: playerData.isDead || false,
             name:
               playerData.name ||
@@ -578,7 +578,7 @@ class Game {
 
     this.network.on("newPlayer", (data) => {
       const newPlayerData = data.player;
-      if (!newPlayerData.color) newPlayerData.color = "#000000";
+      if (!newPlayerData.color) newPlayerData.color = "#FFFFFF";
       newPlayerData.isDead = newPlayerData.isDead || false;
       newPlayerData.name =
         newPlayerData.name ||

@@ -373,6 +373,16 @@ export class Renderer {
         this.ctx.arc(p.x, p.y, p.radius, 0, Math.PI * 2);
       }
       this.ctx.fill();
+      
+      // Add gray outline for all players
+      this.ctx.strokeStyle = "#bdbdbd";
+      this.ctx.lineWidth = 2;
+      this.ctx.beginPath();
+      for (const p of playersToDraw) {
+        this.ctx.moveTo(p.x + p.radius, p.y);
+        this.ctx.arc(p.x, p.y, p.radius, 0, Math.PI * 2);
+      }
+      this.ctx.stroke();
     }
 
     this.ctx.strokeStyle = "#800000";
@@ -396,18 +406,22 @@ export class Renderer {
 
     // Render player names
     this.ctx.textAlign = "center";
-    this.ctx.font = 'bold 16px "Verdana", Arial, Helvetica, sans-serif'; // Using Verdana
+    this.ctx.font = 'bold 16px "Baloo Paaji 2", Arial, Helvetica, sans-serif';
     this.ctx.textBaseline = "bottom";
-    this.ctx.lineWidth = 1; // Outline thickness
+    this.ctx.lineWidth = 2;
 
     for (const [, playersToDraw] of colorGroups) {
       for (const p of playersToDraw) {
         if (p.name) {
           const textX = p.x;
-          const textY = p.y - p.radius - 5; // Adjusted y position slightly for new font size/outline
+          const textY = p.y - p.radius - 5;
+
+          // Draw text outline
+          this.ctx.strokeStyle = "#bdbdbd";
+          this.ctx.strokeText(p.name, textX, textY);
 
           // Main text
-          this.ctx.fillStyle = "#000000"; // Darker fill color
+          this.ctx.fillStyle = "#FFFFFF";
           this.ctx.fillText(p.name, textX, textY);
         }
       }

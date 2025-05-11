@@ -7,6 +7,8 @@ const { Homing } = require('./enemies/Homing');
 const { VoidCrawler } = require('./enemies/VoidCrawler');
 const { Wall } = require('./enemies/Wall');
 const { Bullet } = require('./enemies/Bullet');
+const { RecursiveBullet } = require('./enemies/RecursiveBullet');
+const { RecursiveBulletBoss } = require('./enemies/RecursiveBulletBoss');
 
 const ENEMY_TYPES = {
   1: { name: 'Basic', color: '#808080', outlineColor: '#000000' },
@@ -14,8 +16,12 @@ const ENEMY_TYPES = {
   3: { name: 'Dasher', color: '#003c66', outlineColor: '#001830' },
   4: { name: 'Homing', color: '#7F00FF', outlineColor: '#5c4200' },
   5: { name: 'VoidCrawler', color: '#1c0a2d', outlineColor: '#0d0517' },
-  6: { name: 'Wall', color: '#222222', outlineColor: '#111111' }
+  6: { name: 'Wall', color: '#222222', outlineColor: '#111111' },
+  7: { name: 'RecursiveBulletBoss', color: '#AD85FF', outlineColor: '#5D2E8C' }
 };
+
+console.log("Loaded enemy types:", Object.keys(ENEMY_TYPES).join(", "));
+console.log("RecursiveBulletBoss loaded:", typeof RecursiveBulletBoss);
 
 const MS_PER_GAME_TICK = 1000 / 60;
 
@@ -41,8 +47,8 @@ Enemy.bulkAddToGrid = function(enemies, grid) {
 };
 
 module.exports = { 
-  Enemy, Sniper, Dasher, Homing, VoidCrawler, Wall,
-  Bullet, ENEMY_TYPES, 
+  Enemy, Sniper, Dasher, Homing, VoidCrawler, Wall, RecursiveBulletBoss,
+  Bullet, RecursiveBullet, ENEMY_TYPES, 
   initializeGridWithMap: Enemy.initializeGridWithMap,
   bulkAddToGrid: Enemy.bulkAddToGrid,
   getGrid,

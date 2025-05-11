@@ -241,9 +241,10 @@ async function handlePlayerMessage(game, ws, player, rawMessage, broadcast) {
     if (
       !player.currentMapId &&
       data.type !== "joinGame" &&
-      data.type !== "ping"
+      data.type !== "ping" &&
+      data.type !== "requestIdMap"
     ) {
-      // Allow ping even before joining, but not much else
+      // Allow ping and requestIdMap even before joining, but not much else
       if (data.type === "ping") {
         handlePing(ws, data.time);
       } else {

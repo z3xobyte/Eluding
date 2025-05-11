@@ -352,7 +352,7 @@ class Player {
 
   reset() {
     this.isDead = false;
-    this.color = this.originalColor;
+    this.color = this.originalColor || "#FFFFFF";
     this.maxSpeed = this.originalMaxSpeed;
     this.vx = 0;
     this.vy = 0;

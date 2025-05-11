@@ -7,8 +7,10 @@ const {
   VoidCrawler,
   Wall,
   Bullet,
+  RecursiveBullet,
   ENEMY_TYPES,
   initializeGridWithMap,
+  RecursiveBulletBoss,
 } = require("./enemy");
 const { Player } = require("./player");
 const { Grid } = require("./grid");
@@ -164,6 +166,8 @@ class Game {
           enemy.update(map, grid, this);
         } else if (enemy instanceof Wall) {
           enemy.update(map, grid, this);
+        } else if (enemy instanceof RecursiveBulletBoss) {
+          enemy.update(map, grid, this);
         } else {
           enemy.update(map, grid);
         }
@@ -176,7 +180,14 @@ class Game {
           bulletsOnThisMap.delete(bulletId);
           continue;
         }
-        bullet.update(map, grid);
+        
+        if (bullet.constructor && 
+            (bullet.constructor.name === 'RecursiveBullet' || 
+             (typeof bullet.id === 'string' && bullet.id.startsWith('recursive_bullet_')))) {
+          bullet.update(map, grid, this);
+        } else {
+          bullet.update(map, grid);
+        }
       }
     }
 

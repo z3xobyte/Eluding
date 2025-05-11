@@ -1,10 +1,17 @@
-const { Enemy, Sniper, Dasher, Homing, VoidCrawler, Wall } = require('./enemy');
+const { Enemy, Sniper, Dasher, Homing, VoidCrawler, Wall, RecursiveBulletBoss } = require('./enemy');
 
 class EnemySpawner {
   constructor(mapManager, mapGrids, mapEnemies) {
     this.mapManager = mapManager;
     this.mapGrids = mapGrids;
     this.mapEnemies = mapEnemies;
+    
+    // Validation check
+    if (!RecursiveBulletBoss) {
+      console.error("ERROR: RecursiveBulletBoss class not loaded properly!");
+    } else {
+      console.log("RecursiveBulletBoss class loaded successfully in EnemySpawner");
+    }
   }
 
   spawnEnemiesForMap(mapId, map, grid) {
@@ -23,6 +30,9 @@ class EnemySpawner {
 
     for (const [type, config] of Object.entries(types)) {
       const { count, radius, minSpeed, maxSpeed } = config;
+      
+      // Debug configuration
+      console.log(`Spawning enemy type: ${type}, count: ${count}, radius: ${radius}`);
       
       if (type === "basic") {
         for (let i = 0; i < count; i++) {
@@ -115,6 +125,44 @@ class EnemySpawner {
           voidCrawler.addToGrid(grid);
           enemiesOnThisMap.set(voidCrawler.id, voidCrawler);
           totalEnemiesSpawned++;
+        }
+      } else if (type === "recursive_bullet_boss") {
+        try {
+          if (!RecursiveBulletBoss) {
+            throw new Error("RecursiveBulletBoss class not available");
+          }
+          
+          console.log(`Spawning ${count} RecursiveBulletBoss enemies with config:`, config);
+          
+          for (let i = 0; i < count; i++) {
+            const spawnPos = map.getValidSpawnPosition(spawnTileType, radius, grid);
+            if (!spawnPos) {
+              console.warn(`Could not find valid spawn position for RecursiveBulletBoss #${i+1}`);
+              continue;
+            }
+
+            const speed = minSpeed + Math.random() * (maxSpeed - minSpeed);
+            console.log(`Creating RecursiveBulletBoss at (${spawnPos.x}, ${spawnPos.y}) with speed ${speed}`);
+            
+            const boss = new RecursiveBulletBoss(
+              spawnPos.x, 
+              spawnPos.y, 
+              radius, 
+              speed,
+              config.shootCooldown || 120,
+              config.bulletRadius || 8,
+              config.bulletSpeed || 4,
+              config.recursionLevels || 2
+            );
+            
+            boss.addToGrid(grid);
+            enemiesOnThisMap.set(boss.id, boss);
+            console.log(`RecursiveBulletBoss added to grid with ID: ${boss.id}`);
+            totalEnemiesSpawned++;
+          }
+        } catch (error) {
+          console.error(`Error spawning RecursiveBulletBoss: ${error.message}`);
+          console.error(error.stack);
         }
       } else if (type === "wall") {
         const regions = map.findConnectedRegions(1);
