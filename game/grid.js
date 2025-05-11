@@ -39,6 +39,7 @@ class Grid {
         isSafeZone: false,
         isTeleporter: false,
         teleporterInfo: null,
+        isPlayerSpawnable: false, 
       };
     }
     this.entities = new Map();
@@ -68,6 +69,7 @@ class Grid {
       cell.isSafeZone = false;
       cell.isTeleporter = false;
       cell.teleporterInfo = null;
+      cell.isPlayerSpawnable = false;
     }
 
     const invCellSize = this.inverseCellSize;
@@ -110,11 +112,19 @@ class Grid {
           for (let cY = gridMinY; cY <= gridMaxY; cY++) {
             const cellIndex = cX * cellsYCount + cY;
             const currentCell = cells[cellIndex];
-            if (tileType === 0) {
+            
+            // Reset flags for the cell before applying new properties based on tileType
+            // currentCell.isWall = false; // Already done in the initial loop for all cells
+            // currentCell.isSafeZone = false; // Already done
+            // currentCell.isTeleporter = false; // Already done
+            // currentCell.isPlayerSpawnable = false; // Already done
+
+            if (tileType === 0) { // Wall
               currentCell.isWall = true;
-            } else if (tileType === 2) {
+            } else if (tileType === 2) { // Player-spawnable Safe Zone
               currentCell.isSafeZone = true;
-            } else if (tileType === 3) {
+              currentCell.isPlayerSpawnable = true;
+            } else if (tileType === 3) { // Teleporter
               currentCell.isTeleporter = true;
               const teleporter = map.getTeleporter(tileX, tileY);
               if (teleporter) {
@@ -125,6 +135,9 @@ class Grid {
                   mapId: teleporter.mapId,
                 };
               }
+            } else if (tileType === 4) { // Non-player-spawnable Safe Zone
+              currentCell.isSafeZone = true;
+              currentCell.isPlayerSpawnable = false; // Explicitly false, though it's the default
             }
           }
         }
@@ -450,7 +463,7 @@ class Grid {
       x,
       y,
       rad,
-      (cell) => cell.isWall || cell.isSafeZone || cell.isTeleporter,
+      (cell) => cell.isWall || cell.isTeleporter || (cell.isSafeZone && !cell.isPlayerSpawnable),
     );
   }
 

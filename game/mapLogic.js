@@ -62,7 +62,8 @@ class GameMap {
     if (x < 0 || y < 0 || x >= this.width || y >= this.height) {
       return false;
     }
-    return this.tiles[y][x] === 2;
+    const tileType = this.tiles[y][x];
+    return tileType === 2 || tileType === 4;
   }
   
   getRandomTypePosition(tileType) {

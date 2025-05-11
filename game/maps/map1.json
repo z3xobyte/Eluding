@@ -1,21 +1,21 @@
 {
-  "width": 60,
-  "height": 7,
+  "width": 59,
+  "height": 13,
   "tileSize": 80,
   "enemyConfig": {
     "spawnTileType": 1,
     "types": {
       "basic": {
-        "count": 2,
-        "radius": 10,
-        "minSpeed": 10,
-        "maxSpeed": 15
+        "count": 30,
+        "radius": 15,
+        "minSpeed": 4,
+        "maxSpeed": 5
       },
       "sniper": {
-        "count": 3,
-        "radius": 10,
-        "minSpeed": 5,
-        "maxSpeed": 8,
+        "count": 0,
+        "radius": 15,
+        "minSpeed": 3,
+        "maxSpeed": 5,
         "detectionRange": 500,
         "shootingRange": 400,
         "maxShootCooldown": 100,
@@ -23,35 +23,35 @@
         "bulletSpeed": 5
       },
       "dasher": {
-        "count": 2,
+        "count": 0,
         "radius": 15,
-        "minSpeed": 12,
-        "maxSpeed": 18,
+        "minSpeed": 5,
+        "maxSpeed": 8,
         "timeToPrepare": 750,
         "timeToDash": 3000,
         "timeBetweenDashes": 750
       },
       "homing": {
         "count": 0,
-        "radius": 12,
-        "minSpeed": 8,
-        "maxSpeed": 12,
+        "radius": 15,
+        "minSpeed": 4,
+        "maxSpeed": 6,
         "turnIncrement": 0.05,
         "homeRange": 200
       },
       "void_crawler": {
         "count": 0,
-        "radius": 14,
-        "minSpeed": 10,
-        "maxSpeed": 15,
+        "radius": 15,
+        "minSpeed": 4,
+        "maxSpeed": 6,
         "turnIncrement": 0.05,
         "homeRange": 200
       },
       "wall": {
-        "count": 2,
-        "radius": 14,
-        "minSpeed": 8,
-        "maxSpeed": 8,
+        "count": 0,
+        "radius": 15,
+        "minSpeed": 3,
+        "maxSpeed": 5,
         "moveClockwise": true,
         "patternAlternate": false,
         "initialSide": 0
@@ -62,10 +62,26 @@
     {
       "code": "area1_area2",
       "mapId": "area1"
+    },
+    {
+      "code": "area2_area3",
+      "mapId": "area3"
     }
   ],
   "encodedMap": [
-    0, 61, 2, 3, 1, 54, 0, 3, 2, 3, 1, 54, 0, 3, 2, 3, 1, 54, 3, 1, 0, 2, 2, 3,
-    1, 54, 0, 3, 2, 3, 1, 54, 0, 62
+    0, 60, 1, 22, 0, 13, 1, 22, 0, 2, 1, 23, 0, 11, 1, 23, 0, 2, 1, 24, 0, 3, 4,
+    3, 0, 3, 1, 24, 0, 2, 1, 2, 0, 1, 1, 5, 0, 1, 1, 5, 0, 1, 1, 5, 0, 1, 1, 4,
+    0, 1, 4, 5, 0, 1, 1, 4, 0, 1, 1, 5, 0, 1, 1, 5, 0, 1, 1, 5, 0, 1, 1, 2, 0,
+    2, 1, 1, 0, 1, 4, 1, 1, 4, 0, 1, 4, 1, 1, 4, 0, 1, 4, 1, 1, 4, 0, 1, 4, 1,
+    1, 4, 4, 2, 0, 1, 4, 1, 0, 1, 4, 2, 1, 4, 4, 1, 0, 1, 1, 4, 4, 1, 0, 1, 1,
+    4, 4, 1, 0, 1, 1, 4, 4, 1, 0, 1, 1, 1, 0, 3, 3, 1, 1, 4, 0, 1, 4, 1, 1, 4,
+    0, 1, 4, 1, 1, 4, 0, 1, 4, 1, 1, 5, 4, 2, 0, 1, 2, 1, 0, 1, 4, 2, 1, 5, 4,
+    1, 0, 1, 1, 4, 4, 1, 0, 1, 1, 4, 4, 1, 0, 1, 1, 4, 3, 1, 0, 3, 1, 1, 0, 1,
+    4, 1, 1, 4, 0, 1, 4, 1, 1, 4, 0, 1, 4, 1, 1, 4, 0, 1, 4, 1, 1, 4, 4, 2, 0,
+    1, 4, 1, 0, 1, 4, 2, 1, 4, 4, 1, 0, 1, 1, 4, 4, 1, 0, 1, 1, 4, 4, 1, 0, 1,
+    1, 4, 4, 1, 0, 1, 1, 1, 0, 2, 1, 2, 0, 1, 1, 5, 0, 1, 1, 5, 0, 1, 1, 5, 0,
+    1, 1, 4, 0, 1, 4, 5, 0, 1, 1, 4, 0, 1, 1, 5, 0, 1, 1, 5, 0, 1, 1, 5, 0, 1,
+    1, 2, 0, 2, 1, 24, 0, 3, 4, 3, 0, 3, 1, 24, 0, 2, 1, 23, 0, 11, 1, 23, 0, 2,
+    1, 22, 0, 13, 1, 22, 0, 60
   ]
 }

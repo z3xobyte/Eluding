@@ -186,6 +186,16 @@ export class Renderer {
         "#ffdd7d",
         this.offscreenCtx,
       );
+      this.drawTilesByType(
+        map,
+        mapWidth,
+        mapHeight,
+        tileSize,
+        camera,
+        4,
+        "darkgray",
+        this.offscreenCtx,
+      );
 
       this.renderGridLines(
         map,
@@ -652,6 +662,7 @@ export class Renderer {
       1: "#D7D7D7",
       2: "#999999",
       3: "#E6C26F",
+      4: "#999999",
     };
     for (let x = startCol; x <= endCol; x++) {
       for (let subX = 0; subX <= this.gridSubdivisions; subX++) {
