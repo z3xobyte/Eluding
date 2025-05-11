@@ -480,6 +480,96 @@ class Game {
     this._idMapNeedsUpdate = true;
   }
 
+  async forcePlayerToMapPosition(playerId, targetMapId, targetX, targetY) {
+    const player = this.players.get(playerId);
+    if (!player) {
+      console.warn(`forcePlayerToMapPosition: Player ${playerId} not found.`);
+      return;
+    }
+
+    const connection = this.connections.get(playerId);
+    // If connection is null, player state is updated, but client won't receive direct mapChange.
+    // This might be okay if player is reconnecting.
+
+    const oldMapId = player.currentMapId;
+    const mapChanged = oldMapId !== targetMapId;
+
+    // Update player's core position and stop movement.
+    // Other properties (isDead, color) are assumed to be set by player.reset() before this call.
+    player.x = targetX;
+    player.y = targetY;
+    player.vx = 0; 
+    player.vy = 0;
+    if (player.collider) { 
+        player.collider.pos.x = targetX;
+        player.collider.pos.y = targetY;
+    }
+
+    if (mapChanged) {
+      // Player is changing maps
+      if (oldMapId) {
+        this.broadcastPlayerLeave(playerId, oldMapId);
+      }
+
+      player.currentMapId = targetMapId; // Set new mapId first
+
+      try {
+        await this.loadMapIfNeeded(targetMapId);
+      } catch (error) {
+        console.error(`forcePlayerToMapPosition: Failed to load target map ${targetMapId} for player ${playerId}:`, error);
+        if (connection && connection.readyState === 1) {
+            connection.close(1011, 'Server error: Target map for reset could not be loaded.');
+        }
+        // Consider implications: player.currentMapId is targetMapId, but map failed to load.
+        // This could lead to issues if not handled (e.g., revert currentMapId or kick player).
+        return;
+      }
+      
+      const targetMap = this.mapManager.getMapById(targetMapId);
+
+      if (!targetMap) {
+        console.error(`forcePlayerToMapPosition: Target map ${targetMapId} data not found after attempting load for player ${playerId}.`);
+        if (connection && connection.readyState === 1) {
+          connection.close(1011, 'Server error: Target map data unavailable after load.');
+        }
+        return;
+      }
+
+      // Send mapChange message to the specific player if connected
+      if (connection && connection.readyState === 1) {
+        const enemiesOnNewMap = this.mapEnemies.get(targetMapId) || new Map();
+        const serializedEnemies = Array.from(enemiesOnNewMap.values()).map(e => e.serialize());
+        
+        const mapChangeData = {
+          type: 'mapChange',
+          newMapId: targetMapId,
+          map: targetMap.tiles,
+          mapWidth: targetMap.width,
+          mapHeight: targetMap.height,
+          tileSize: targetMap.tileSize,
+          enemyTypes: ENEMY_TYPES,
+          enemies: serializedEnemies,
+          playerData: player.serialize(), // Includes new position and mapId
+        };
+        const message = JSON.stringify(mapChangeData);
+        try {
+            const compressed = zlib.gzipSync(message);
+            connection.send(compressed);
+        } catch (e) {
+            console.error(`forcePlayerToMapPosition: Failed to compress or send mapChange to ${playerId}:`, e);
+        }
+      }
+
+      this.broadcastNewPlayer(player); // Announce player on the new map
+      this._idMapNeedsUpdate = true; // Flag for ID map regeneration
+
+    } else {
+      // Player stays on the same map, only position changes.
+      // The command handler (for /reset) will send a 'respawn' message to this client.
+      // Regular broadcastGameState will inform other players of the position change.
+    }
+  }
+
   broadcastGameState() {
     this._updateCounter++;
     const needsFullIdMapForAll =

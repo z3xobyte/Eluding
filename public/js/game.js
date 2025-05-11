@@ -87,11 +87,11 @@ class Game {
         // Notify the server that the player is joining with a name
         this.network.send({ type: 'joinGame', name: this.playerName });
 
-        // Allow player to control movement now
+        // Movement should be off initially, requiring a click on canvas to enable.
         if (this.input) {
-          // The first click on canvas will enable movement via Input.js's own toggle
+          this.input.disableMovement(); 
         }
-        // this.isMovementEnabled will be set by the input event listener
+        this.isMovementEnabled = false; // Explicitly set game's movement state
         
       } else {
         this.statusElement.textContent = 'Please enter a name (1-16 characters).';
@@ -492,10 +492,9 @@ class Game {
                 player.x = data.x;
                 player.y = data.y;
                 player.isDead = false;
-                this.isMovementEnabled = data.mouseActive !== undefined ? data.mouseActive : true; 
+                this.isMovementEnabled = false; // Ensure movement is off after reset
                 if (this.input) {
-                    if(this.isMovementEnabled) this.input.enableMovement();
-                    else this.input.disableMovement();
+                    this.input.disableMovement(); // Tell Input class to disable its state
                 }
             }
         } else {
