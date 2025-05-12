@@ -988,19 +988,19 @@ class Game {
     // --- Enemy Setup ---
     orbitContainer.innerHTML = ''; // Clear previous enemies
     const enemyTypesForAnim = [
-        { id: 1, color: '#808080', size: 20, speed: 1.0 },     // Basic
-        { id: 2, color: '#8B0000', size: 22, speed: 0.95 },    // Sniper
-        { id: 3, color: '#003c66', size: 25, speed: 1.05 },    // Dasher
-        { id: 4, color: '#7F00FF', size: 18, speed: 0.97 },    // Homing
-        { id: 5, color: '#1c0a2d', size: 28, speed: 0.93 },    // VoidCrawler
-        { id: 2, color: '#a05353', size: 16, speed: 1.03 },    // Extra enemy type 
-        { id: 3, color: '#003c66', size: 25, speed: 0.98 },    // Extra enemy type
-        { id: 4, color: '#7F00FF', size: 18, speed: 1.02 },    // Extra enemy type
-        { id: 1, color: '#808080', size: 20, speed: 0.94 },    // Extra enemy type
-        { id: 5, color: '#1c0a2d', size: 24, speed: 1.01 },    // Extra enemy type
-        { id: 4, color: '#7F00FF', size: 18, speed: 0.99 },    // Extra enemy type
-        { id: 2, color: '#8B0000', size: 22, speed: 1.04 }     // Extra enemy type
-        // Add more types if desired, adjusting orbitRadius and speed
+      { id: 1, color: '#808080', size: 20, speed: 1.0 },     // Gray with black outline
+      { id: 2, color: '#8B0000', size: 22, speed: 0.95 },    // Red with black outline
+      { id: 3, color: '#003c66', size: 25, speed: 1.05 },    // Blue with black outline
+      { id: 4, color: '#a0522d', size: 18, speed: 0.97 },    // Brown with black outline
+      { id: 5, color: '#000000', size: 28, speed: 0.93 },    // Black, no outline
+  
+      { id: 2, color: '#8B0000', size: 16, speed: 1.03 },    // Red
+      { id: 3, color: '#003c66', size: 25, speed: 0.98 },    // Blue
+      { id: 4, color: '#a0522d', size: 18, speed: 1.02 },    // Brown
+      { id: 1, color: '#808080', size: 20, speed: 0.94 },    // Gray
+      { id: 5, color: '#000000', size: 24, speed: 1.01 },    // Black
+      { id: 4, color: '#a0522d', size: 18, speed: 0.99 },    // Brown
+      { id: 2, color: '#8B0000', size: 22, speed: 1.04 }
     ];
 
     // Use a single orbit radius for all enemies - perfect circle
