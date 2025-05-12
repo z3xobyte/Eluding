@@ -53,6 +53,10 @@ const clientConfig = {
             ignore: ["**/js/**"],
           },
         },
+        {
+          from: "map_editor.html",
+          to: "../mapeditor.html",
+        },
       ],
     }),
   ],

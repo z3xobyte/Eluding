@@ -21,6 +21,11 @@ app.use(express.static(config.STATIC_PATH, {
   }
 }));
 
+// Route for the map editor
+app.get('/mapeditor', (req, res) => {
+  res.sendFile(path.join(config.STATIC_PATH, 'mapeditor.html'));
+});
+
 const mapManager = new MapManager();
 const game = new Game(mapManager);
 
@@ -45,6 +50,7 @@ game.start();
 
 server.listen(config.PORT, () => {
   console.log(`Server running on port ${config.PORT}`);
+  console.log(`Map editor available at http://localhost:${config.PORT}/mapeditor`);
 });
 
 process.on('SIGINT', () => {
