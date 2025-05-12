@@ -61,11 +61,11 @@
   "teleporterCodes": [
     {
       "code": "area1_area2",
-      "mapId": "area2"
+      "mapId": "area1"
     },
     {
       "code": "area2_area3",
-      "mapId": "area2"
+      "mapId": "area3"
     }
   ],
   "encodedMap": [
