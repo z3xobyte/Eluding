@@ -500,22 +500,22 @@
                 // Add common controllers
                 currentControllers.push(
                     configFolder
-                        .add(typeConfig, "count", 0, 50, 1)
+                        .add(typeConfig, "count", 0, 500, 1)
                         .name("Count"),
                 );
                 currentControllers.push(
                     configFolder
-                        .add(typeConfig, "radius", 5, 30, 1)
+                        .add(typeConfig, "radius", 5, 300, 1)
                         .name("Radius"),
                 );
                 currentControllers.push(
                     configFolder
-                        .add(typeConfig, "minSpeed", 1, 20, 1)
+                        .add(typeConfig, "minSpeed", 1, 200, 1)
                         .name("Min Speed"),
                 );
                 currentControllers.push(
                     configFolder
-                        .add(typeConfig, "maxSpeed", 1, 20, 1)
+                        .add(typeConfig, "maxSpeed", 1, 200, 1)
                         .name("Max Speed"),
                 );
 
@@ -544,19 +544,19 @@
                                     typeConfig,
                                     "maxShootCooldown",
                                     10,
-                                    500,
+                                    5000,
                                     10,
                                 )
                                 .name("Shoot Cooldown"),
                         );
                         currentControllers.push(
                             configFolder
-                                .add(typeConfig, "bulletRadius", 2, 20, 1)
+                                .add(typeConfig, "bulletRadius", 2, 200, 1)
                                 .name("Bullet Radius"),
                         );
                         currentControllers.push(
                             configFolder
-                                .add(typeConfig, "bulletSpeed", 1, 20, 1)
+                                .add(typeConfig, "bulletSpeed", 1, 200, 1)
                                 .name("Bullet Speed"),
                         );
                         break;
@@ -600,7 +600,7 @@
                         );
                         currentControllers.push(
                             configFolder
-                                .add(typeConfig, "homeRange", 50, 500, 10)
+                                .add(typeConfig, "homeRange", 50, 5000, 10)
                                 .name("Home Range"),
                         );
                         break;
