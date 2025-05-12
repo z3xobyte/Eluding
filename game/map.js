@@ -30,6 +30,16 @@ class MapManager {
           
           const loadTime = Date.now() - startTime;
           console.log(`Binary map ${mapId} loaded successfully in ${loadTime}ms`);
+          
+          // Check for teleporter links and ensure they're properly associated
+          if (mapData.teleporterLinks && mapData.teleporterLinks.length > 0) {
+            console.log(`Map ${mapId} has ${mapData.teleporterLinks.length} teleporter links`);
+            
+            // Make sure the teleporter links are passed to the teleporter manager
+            if (this.maps[mapId].teleporterManager && typeof this.maps[mapId].teleporterManager.setTeleporterLinks === 'function') {
+              this.maps[mapId].teleporterManager.setTeleporterLinks(mapData.teleporterLinks);
+            }
+          }
         } 
         else {
           console.log(`Loading JSON map from: ${jsonMapPath}`);
@@ -43,6 +53,16 @@ class MapManager {
           
           const loadTime = Date.now() - startTime;
           console.log(`JSON map ${mapId} loaded successfully in ${loadTime}ms`);
+          
+          // Check for teleporter links
+          if (mapData.teleporterLinks && mapData.teleporterLinks.length > 0) {
+            console.log(`Map ${mapId} has ${mapData.teleporterLinks.length} teleporter links`);
+            
+            // Make sure the teleporter links are passed to the teleporter manager
+            if (this.maps[mapId].teleporterManager && typeof this.maps[mapId].teleporterManager.setTeleporterLinks === 'function') {
+              this.maps[mapId].teleporterManager.setTeleporterLinks(mapData.teleporterLinks);
+            }
+          }
           
           if (this.useBinaryMaps) {
             try {

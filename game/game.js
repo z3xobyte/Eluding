@@ -311,6 +311,78 @@ class Game {
       teleporterUsed = map.getTeleporter(tileX, tileY);
     }
 
+    // Try the direct teleporter link first (new format)
+    try {
+      // Extract current map index (map1 -> 0, map2 -> 1, etc.)
+      const currentMapIndex = parseInt(currentMapId.replace(/[^0-9]/g, '')) - 1;
+      
+      if (map.teleporterLinks && map.teleporterLinks.length > 0) {
+        // Find a teleporter link that matches the current position
+        const link = map.teleporterLinks.find(link => {
+          const [fromMapIndex, fromX, fromY] = link.fromKey.split(',').map(Number);
+          return fromMapIndex === currentMapIndex && fromX === tileX && fromY === tileY;
+        });
+        
+        if (link) {
+          // We found a direct link
+          console.log(`[GAME] Using direct teleporter link for player ${playerId.substring(0, 8)}`);
+          
+          const [toMapIndex, toX, toY] = link.toKey.split(',').map(Number);
+          const destinationMapId = `map${toMapIndex + 1}`;
+          
+          // Prepare a temporary teleporter object for the destination
+          const targetTeleporter = { 
+            tileX: toX, 
+            tileY: toY,
+            code: `link_${link.fromKey}_to_${link.toKey}`
+          };
+          
+          // Load the destination map
+          const destinationMap = await this.loadMapIfNeeded(destinationMapId);
+          if (!destinationMap) {
+            console.error(`[GAME] Teleport failed: Destination map ${destinationMapId} could not be loaded.`);
+            return;
+          }
+          
+          // Calculate the destination position
+          const newX = targetTeleporter.tileX * destinationMap.tileSize + destinationMap.tileSize / 2;
+          const newY = targetTeleporter.tileY * destinationMap.tileSize + destinationMap.tileSize / 2;
+          
+          // Move the player
+          const oldMapId = player.currentMapId;
+          player.x = newX;
+          player.y = newY;
+          player.currentMapId = destinationMapId;
+          
+          if (player.collider) {
+            player.collider.pos.x = newX;
+            player.collider.pos.y = newY;
+          }
+          
+          // Set teleporter exit area to prevent immediate re-teleportation
+          player.needsToExitTeleporterArea = {
+            id: targetTeleporter.code,
+            x: targetTeleporter.tileX * destinationMap.tileSize,
+            y: targetTeleporter.tileY * destinationMap.tileSize,
+            width: destinationMap.tileSize,
+            height: destinationMap.tileSize,
+            mapId: destinationMapId,
+          };
+          
+          console.log(`[GAME] Player ${playerId.substring(0, 8)} teleported from ${oldMapId} to ${destinationMapId} at (${newX}, ${newY}) via direct link`);
+          
+          // Send map change to the player
+          this.sendMapChangeToPlayer(player, playerId, destinationMap, destinationMapId);
+          this._idMapNeedsUpdate = true;
+          return;
+        }
+      }
+    } catch (error) {
+      console.error(`[GAME] Error processing teleporter link:`, error);
+      // Continue with traditional teleporter handling
+    }
+
+    // Fallback to the traditional code-based teleporter system
     if (!teleporterUsed || !teleporterUsed.code) {
       return;
     }
@@ -416,78 +488,81 @@ class Game {
     console.log(
       `[GAME] Player ${playerId.substring(0, 8)} teleported from ${oldMapId} to ${destinationMapId} at (${newX}, ${newY}) via teleporter with code ${teleporterCode}`,
     );
-    const connection = this.connections.get(playerId);
-    if (connection && connection.readyState === 1) {
-      const enemiesOnNewMap =
-        this.mapEnemies.get(destinationMapId) || new Map();
-      const serializedEnemies = Array.from(enemiesOnNewMap.values()).map((e) =>
-        e.serialize(),
-      );
-
-      const bulletsOnNewMap =
-        this.mapBullets.get(destinationMapId) || new Map();
-      const serializedBullets = Array.from(bulletsOnNewMap.values())
-        .filter((b) => b.isActive)
-        .map((b) => b.serialize());
-
-      try {
-        const mapData = {
-          width: destinationMap.width,
-          height: destinationMap.height,
-          tileSize: destinationMap.tileSize,
-          map: destinationMap.tiles,
-          teleporterCodes: destinationMap.teleporterCodes,
-          enemyConfig: destinationMap.enemyConfig,
-        };
-
-        const optimizedMapData = BinaryMapEncoder.encodeForNetwork(mapData);
-
-        connection.send(optimizedMapData);
-
-        const mapChangeData = {
-          type: "mapChange",
-          newMapId: destinationMapId,
-          mapWidth: destinationMap.width,
-          mapHeight: destinationMap.height,
-          tileSize: destinationMap.tileSize,
-          enemyTypes: ENEMY_TYPES,
-          enemies: serializedEnemies,
-          bullets: serializedBullets,
-          playerData: player.serialize(),
-        };
-
-        // Send mapChangeData immediately
-        if (connection.readyState === 1) {
-          const message = JSON.stringify(mapChangeData);
-          const compressed = zlib.gzipSync(message);
-          connection.send(compressed);
-          console.log(
-            `[GAME] Map change message sent to player ${playerId.substring(0, 8)}`,
-          );
-        }
-      } catch (e) {
-        console.error("Failed to send optimized map data:", e);
-
-        const mapChangeData = {
-          type: "mapChange",
-          newMapId: destinationMapId,
-          map: destinationMap.tiles,
-          mapWidth: destinationMap.width,
-          mapHeight: destinationMap.height,
-          tileSize: destinationMap.tileSize,
-          enemyTypes: ENEMY_TYPES,
-          enemies: serializedEnemies,
-          bullets: serializedBullets,
-          playerData: player.serialize(),
-        };
-        const message = JSON.stringify(mapChangeData);
-        connection.send(message);
-        console.log(
-          `[GAME] Traditional map data sent to player ${playerId.substring(0, 8)} (fallback)`,
-        );
-      }
-    }
+    
+    // Send map change to the player
+    this.sendMapChangeToPlayer(player, playerId, destinationMap, destinationMapId);
     this._idMapNeedsUpdate = true;
+  }
+  
+  // Helper method to send map change to a player
+  sendMapChangeToPlayer(player, playerId, destinationMap, destinationMapId) {
+    const connection = this.connections.get(playerId);
+    if (!connection || connection.readyState !== 1) return;
+    
+    const enemiesOnNewMap = this.mapEnemies.get(destinationMapId) || new Map();
+    const serializedEnemies = Array.from(enemiesOnNewMap.values()).map((e) =>
+      e.serialize(),
+    );
+
+    const bulletsOnNewMap = this.mapBullets.get(destinationMapId) || new Map();
+    const serializedBullets = Array.from(bulletsOnNewMap.values())
+      .filter((b) => b.isActive)
+      .map((b) => b.serialize());
+
+    try {
+      const mapData = {
+        width: destinationMap.width,
+        height: destinationMap.height,
+        tileSize: destinationMap.tileSize,
+        map: destinationMap.tiles,
+        teleporterCodes: destinationMap.teleporterCodes,
+        teleporterLinks: destinationMap.teleporterLinks,
+        enemyConfig: destinationMap.enemyConfig,
+      };
+
+      const optimizedMapData = BinaryMapEncoder.encodeForNetwork(mapData);
+      connection.send(optimizedMapData);
+
+      const mapChangeData = {
+        type: "mapChange",
+        newMapId: destinationMapId,
+        mapWidth: destinationMap.width,
+        mapHeight: destinationMap.height,
+        tileSize: destinationMap.tileSize,
+        enemyTypes: ENEMY_TYPES,
+        enemies: serializedEnemies,
+        bullets: serializedBullets,
+        playerData: player.serialize(),
+      };
+
+      // Send mapChangeData immediately
+      const message = JSON.stringify(mapChangeData);
+      const compressed = zlib.gzipSync(message);
+      connection.send(compressed);
+      console.log(
+        `[GAME] Map change message sent to player ${playerId.substring(0, 8)}`,
+      );
+    } catch (e) {
+      console.error("Failed to send optimized map data:", e);
+
+      const mapChangeData = {
+        type: "mapChange",
+        newMapId: destinationMapId,
+        map: destinationMap.tiles,
+        mapWidth: destinationMap.width,
+        mapHeight: destinationMap.height,
+        tileSize: destinationMap.tileSize,
+        enemyTypes: ENEMY_TYPES,
+        enemies: serializedEnemies,
+        bullets: serializedBullets,
+        playerData: player.serialize(),
+      };
+      const message = JSON.stringify(mapChangeData);
+      connection.send(message);
+      console.log(
+        `[GAME] Traditional map data sent to player ${playerId.substring(0, 8)} (fallback)`,
+      );
+    }
   }
 
   async forcePlayerToMapPosition(playerId, targetMapId, targetX, targetY) {

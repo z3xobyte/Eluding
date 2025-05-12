@@ -172,6 +172,7 @@ export class Network {
           height,
           tileSize: mapData.tileSize,
           teleporterCodes: mapData.teleporterCodes,
+          teleporterLinks: mapData.teleporterLinks,
           enemyConfig: mapData.enemyConfig
         };
         
@@ -210,6 +211,8 @@ export class Network {
           message.mapWidth = this._pendingMapData.width;
           message.mapHeight = this._pendingMapData.height;
           message.tileSize = this._pendingMapData.tileSize;
+          message.teleporterCodes = this._pendingMapData.teleporterCodes;
+          message.teleporterLinks = this._pendingMapData.teleporterLinks;
           
           console.log(`Using pending map data: ${message.mapWidth}x${message.mapHeight}`);
           this._pendingMapData = null;

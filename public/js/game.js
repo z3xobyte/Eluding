@@ -370,6 +370,19 @@ class Game {
       this.mapHeight = data.mapHeight;
       this.tileSize = data.tileSize;
       this.enemyTypes = data.enemyTypes || {};
+      
+      // Store teleporter data
+      if (data.teleporterCodes) {
+        this.teleporterCodes = data.teleporterCodes;
+      }
+      
+      // Store teleporter links (new format)
+      if (data.teleporterLinks) {
+        this.teleporterLinks = data.teleporterLinks;
+        console.log(`Received ${this.teleporterLinks.length} teleporter links for map ${data.newMapId}`);
+      } else {
+        this.teleporterLinks = [];
+      }
 
       this.players.clear();
       this.enemies.clear();

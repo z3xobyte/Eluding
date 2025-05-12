@@ -262,25 +262,49 @@ class Player {
       if (map.isTeleporter && map.isTeleporter(playerTileX, playerTileY)) {
         const teleporter = map.getTeleporter(playerTileX, playerTileY);
 
-        if (teleporter && teleporter.code) {
-          // Ensure teleporter object and code exist
+        // First, try to find a direct teleporter link (new format)
+        let useDirectLink = false;
+        
+        if (map.teleporterLinks && map.teleporterLinks.length > 0) {
+          // Extract current map index (map1 -> 0, map2 -> 1, etc.)
+          const currentMapId = this.currentMapId;
+          const currentMapIndex = parseInt(currentMapId.replace(/[^0-9]/g, '')) - 1;
+          
+          // Check if there's a direct link for this teleporter
+          for (const link of map.teleporterLinks) {
+            const [fromMapIndex, fromX, fromY] = link.fromKey.split(',').map(Number);
+            if (fromMapIndex === currentMapIndex && fromX === playerTileX && fromY === playerTileY) {
+              // Found a direct link - use it through gameInstance.handlePlayerTeleport
+              if (gameInstance && typeof gameInstance.handlePlayerTeleport === "function") {
+                this.justTeleportedFlag = true;
+                this.lastTeleportTimestamp = currentTime;
+                gameInstance.handlePlayerTeleport(this.id, { 
+                  tileX: playerTileX, 
+                  tileY: playerTileY,
+                  // No code or mapId needed for direct links - the game will find them
+                });
+                useDirectLink = true;
+                break;
+              }
+            }
+          }
+        }
+        
+        // If no direct link was found or used, try the traditional teleporter system
+        if (!useDirectLink && teleporter && teleporter.code) {
           // Create SAT polygon for the teleporter
-          // Teleporter objects from map.getTeleporter should have tileX, tileY
-          // We need its world coordinates and dimensions for SAT.js
           const teleporterWorldX = teleporter.tileX * map.tileSize;
           const teleporterWorldY = teleporter.tileY * map.tileSize;
-          // Assuming teleporters are one tile size.
-          // If teleporters have their own width/height properties, use them from the teleporter object.
           const teleporterWidth = teleporter.width || map.tileSize;
           const teleporterHeight = teleporter.height || map.tileSize;
 
           const teleporterPolygon = new SAT.Box(
-            new SAT.Vector(teleporterWorldX, teleporterWorldY), // Use world coordinates
-            teleporterWidth, // Use actual width
-            teleporterHeight, // Use actual height
+            new SAT.Vector(teleporterWorldX, teleporterWorldY),
+            teleporterWidth,
+            teleporterHeight,
           ).toPolygon();
 
-          this.response.clear(); // Clear response object for new test
+          this.response.clear();
           if (
             SAT.testCirclePolygon(
               this.collider,
@@ -293,13 +317,9 @@ class Player {
               gameInstance &&
               typeof gameInstance.handlePlayerTeleport === "function"
             ) {
-              // DO NOT set needsToExitTeleporterArea here.
-              // It will be set by game.js after successful teleportation to the DESTINATION teleporter's area.
-
               this.justTeleportedFlag = true;
-              this.lastTeleportTimestamp = currentTime; // Record time of teleport
-              gameInstance.handlePlayerTeleport(this.id, teleporter); // Pass player ID and teleporter object
-              // No break needed as we are not in a loop of teleporters anymore
+              this.lastTeleportTimestamp = currentTime;
+              gameInstance.handlePlayerTeleport(this.id, teleporter);
             }
           }
         }
