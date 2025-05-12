@@ -12,7 +12,7 @@
         "maxSpeed": 5
       },
       "sniper": {
-        "count": 0,
+        "count": 5,
         "radius": 15,
         "minSpeed": 3,
         "maxSpeed": 5,
@@ -57,14 +57,14 @@
         "initialSide": 0
       },
       "recursive_bullet_boss": {
-        "count": 1,
+        "count": 8,
         "radius": 25,
         "minSpeed": 0.5,
         "maxSpeed": 1.0,
-        "shootCooldown": 10,
+        "shootCooldown": 2000,
         "bulletRadius": 12,
-        "bulletSpeed": 50,
-        "recursionLevels": 2
+        "bulletSpeed": 5,
+        "recursionLevels": 1
       }
     }
   },

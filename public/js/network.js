@@ -10,6 +10,8 @@ export class Network {
     this.lastMovementTime = 0;
     this.ping = 0;
     this.pingInterval = null;
+    this.pingHistory = [];
+    this.pingHistoryMaxSize = 5; // Keep last 5 pings for averaging
     
     this.playerIdMap = new Map();
     this.enemyIdMap = new Map();
@@ -265,7 +267,24 @@ export class Network {
         break;
       
       case 'pong':
-        this.ping = Date.now() - message.clientTime;
+        const currentPing = Date.now() - message.clientTime;
+        
+        // Add to ping history
+        this.pingHistory.push(currentPing);
+        
+        // Keep history at max size
+        if (this.pingHistory.length > this.pingHistoryMaxSize) {
+          this.pingHistory.shift();
+        }
+        
+        // Calculate average ping
+        if (this.pingHistory.length > 0) {
+          const sum = this.pingHistory.reduce((a, b) => a + b, 0);
+          this.ping = sum / this.pingHistory.length;
+        } else {
+          this.ping = currentPing;
+        }
+        
         this.updatePingDisplay();
         break;
       
@@ -283,7 +302,11 @@ export class Network {
   
   startPingInterval() {
     this.clearPingInterval();
-    this.pingInterval = setInterval(() => this.sendPing(), 2000);
+    this.pingHistory = []; // Reset ping history when starting new interval
+    // Send ping more frequently for better accuracy
+    this.pingInterval = setInterval(() => this.sendPing(), 1000);
+    // Send initial ping immediately
+    this.sendPing();
   }
   
   clearPingInterval() {
@@ -294,16 +317,31 @@ export class Network {
   }
   
   sendPing() {
-    this.send({
-      type: 'ping',
-      time: Date.now()
-    });
+    if (this.socket && this.socket.readyState === WebSocket.OPEN) {
+      this.send({
+        type: 'ping',
+        time: Date.now()
+      });
+    }
   }
   
   updatePingDisplay() {
     const pingDisplay = document.getElementById('ping');
     if (pingDisplay) {
-      pingDisplay.textContent = `Ping: ${this.ping} ms`;
+      // Round to integer for cleaner display
+      const displayPing = Math.round(this.ping);
+      pingDisplay.textContent = `Ping: ${displayPing} ms`;
+      
+      // Add color based on ping value
+      if (displayPing < 50) {
+        pingDisplay.style.color = '#00FF00'; // Good ping - green
+      } else if (displayPing < 100) {
+        pingDisplay.style.color = '#FFFF00'; // Moderate ping - yellow
+      } else if (displayPing < 200) {
+        pingDisplay.style.color = '#FFA500'; // Poor ping - orange
+      } else {
+        pingDisplay.style.color = '#FF0000'; // Bad ping - red
+      }
     }
   }
   
