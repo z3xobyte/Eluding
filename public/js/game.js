@@ -898,12 +898,28 @@ class Game {
     introOverlay.style.display = 'block'; // Show the overlay (using block to let absolute positioning work inside)
     introOverlay.style.pointerEvents = 'auto'; 
 
+    // Create welcome text element
+    const welcomeTextElement = document.createElement('div');
+    welcomeTextElement.id = 'intro-welcome-text';
+    welcomeTextElement.style.position = 'absolute';
+    welcomeTextElement.style.top = '35%';
+    welcomeTextElement.style.left = '0';
+    welcomeTextElement.style.width = '100%';
+    welcomeTextElement.style.textAlign = 'center';
+    welcomeTextElement.style.color = '#ffffff';
+    welcomeTextElement.style.fontFamily = "'Baloo Paaji 2', sans-serif";
+    welcomeTextElement.style.fontSize = '42px';
+    welcomeTextElement.style.opacity = '0';
+    welcomeTextElement.style.textShadow = '0 0 10px rgba(255, 255, 255, 0.7)';
+    welcomeTextElement.innerHTML = 'Welcome to Eluding!';
+    introOverlay.appendChild(welcomeTextElement);
+
     // Initialize particles.js with our config
     try {
       particlesJS('particles-js', {
         "particles": {
           "number": {
-            "value": 80,
+            "value": 160,
             "density": {
               "enable": true,
               "value_area": 800
@@ -916,34 +932,39 @@ class Game {
             "type": "circle",
             "stroke": {
               "width": 0,
-              "color": "#000000"
+              "color": "#484848"
             },
             "polygon": {
-              "nb_sides": 3
+              "nb_sides": 5
+            },
+            "image": {
+              "src": "img/github.svg",
+              "width": 100,
+              "height": 100
             }
           },
           "opacity": {
             "value": 1,
             "random": true,
             "anim": {
-              "enable": false,
+              "enable": true,
               "speed": 1,
-              "opacity_min": 0.1,
+              "opacity_min": 0,
               "sync": false
             }
           },
           "size": {
-            "value": 3,
+            "value": 23.67442924896818,
             "random": true,
             "anim": {
               "enable": false,
-              "speed": 40,
-              "size_min": 0.1,
+              "speed": 4,
+              "size_min": 0.3,
               "sync": false
             }
           },
           "line_linked": {
-            "enable": true,
+            "enable": false,
             "distance": 150,
             "color": "#ffffff",
             "opacity": 0.4,
@@ -951,16 +972,16 @@ class Game {
           },
           "move": {
             "enable": true,
-            "speed": 6,
+            "speed": 1,
             "direction": "none",
             "random": true,
             "straight": false,
             "out_mode": "out",
             "bounce": false,
             "attract": {
-              "enable": true,
-              "rotateX": 1600,
-              "rotateY": 1200
+              "enable": false,
+              "rotateX": 600,
+              "rotateY": 600
             }
           }
         },
@@ -968,15 +989,42 @@ class Game {
           "detect_on": "canvas",
           "events": {
             "onhover": {
-              "enable": false
+              "enable": false,
+              "mode": "bubble"
             },
             "onclick": {
-              "enable": false
+              "enable": false,
+              "mode": "repulse"
             },
             "resize": true
+          },
+          "modes": {
+            "grab": {
+              "distance": 400,
+              "line_linked": {
+                "opacity": 1
+              }
+            },
+            "bubble": {
+              "distance": 287.7122877122877,
+              "size": 19.98001998001998,
+              "duration": 2,
+              "opacity": 0,
+              "speed": 3
+            },
+            "repulse": {
+              "distance": 400,
+              "duration": 0.4
+            },
+            "push": {
+              "particles_nb": 4
+            },
+            "remove": {
+              "particles_nb": 2
+            }
           }
         },
-        "retina_detect": false
+        "retina_detect": true
       });
     } catch (e) {
       console.error("Failed to initialize particles.js:", e);
@@ -984,61 +1032,12 @@ class Game {
 
     // --- Player Setup ---
     textElement.textContent = this.playerName;
-
-    // --- Enemy Setup ---
-    orbitContainer.innerHTML = ''; // Clear previous enemies
-    const enemyTypesForAnim = [
-      { id: 1, color: '#808080', size: 20, speed: 1.0 },     // Gray with black outline
-      { id: 2, color: '#8B0000', size: 22, speed: 0.95 },    // Red with black outline
-      { id: 3, color: '#003c66', size: 25, speed: 1.05 },    // Blue with black outline
-      { id: 4, color: '#a0522d', size: 18, speed: 0.97 },    // Brown with black outline
-      { id: 5, color: '#000000', size: 28, speed: 0.93 },    // Black, no outline
-  
-      { id: 2, color: '#8B0000', size: 16, speed: 1.03 },    // Red
-      { id: 3, color: '#003c66', size: 25, speed: 0.98 },    // Blue
-      { id: 4, color: '#a0522d', size: 18, speed: 1.02 },    // Brown
-      { id: 1, color: '#808080', size: 20, speed: 0.94 },    // Gray
-      { id: 5, color: '#000000', size: 24, speed: 1.01 },    // Black
-      { id: 4, color: '#a0522d', size: 18, speed: 0.99 },    // Brown
-      { id: 2, color: '#8B0000', size: 22, speed: 1.04 }
-    ];
-
-    // Use a single orbit radius for all enemies - perfect circle
-    const PERFECT_ORBIT_RADIUS = Math.min(window.innerWidth, window.innerHeight) / 2.8; // Responsive orbit size
     
-    // Use actual enemy types if available from server init data
-    const availableEnemyTypes = this.enemyTypes || {};
-    enemyTypesForAnim.forEach(animType => {
-        const serverType = availableEnemyTypes[animType.id];
-        if (serverType && serverType.color) {
-            animType.color = serverType.color;
-        }
-        // Add the same orbit radius to all enemies
-        animType.orbitRadius = PERFECT_ORBIT_RADIUS;
-    });
-    
-    enemyTypesForAnim.forEach((enemyType, index) => {
-        const enemyDiv = document.createElement('div');
-        enemyDiv.classList.add('intro-enemy');
-        enemyDiv.style.width = `${enemyType.size}px`;
-        enemyDiv.style.height = `${enemyType.size}px`;
-        enemyDiv.style.backgroundColor = enemyType.color;
-        // Position relative to center with margins to account for element size
-        enemyDiv.style.marginLeft = `${-enemyType.size / 2}px`; 
-        enemyDiv.style.marginTop = `${-enemyType.size / 2}px`;
-        // Initial transform - will be at center (because of CSS left/top: 50%)
-        enemyDiv.style.transform = 'translate(0, 0) scale(0)';
-
-        // Store orbit data directly on the element for anime.js
-        enemyDiv.dataset.orbitRadius = enemyType.orbitRadius;
-        enemyDiv.dataset.speed = enemyType.speed;
-        enemyDiv.dataset.initialAngle = (index / enemyTypesForAnim.length) * 360; // Evenly spaced around the circle
-
-        orbitContainer.appendChild(enemyDiv);
-    });
+    // Position player slightly lower to make room for welcome text
+    playerElement.style.top = '55%';
 
     // --- Animation Timeline ---
-    const orbitDuration = 6000; // Longer duration to showcase the orbit
+    const animationDuration = 4000; // Shorter duration since we removed the orbit
 
     const timeline = anime.timeline({
       autoplay: true,
@@ -1046,6 +1045,10 @@ class Game {
       complete: () => {
         introOverlay.style.display = 'none';
         introOverlay.style.pointerEvents = 'none';
+        // Remove welcome text element
+        if (welcomeTextElement.parentNode) {
+          welcomeTextElement.parentNode.removeChild(welcomeTextElement);
+        }
         this.isGameActive = true;
         this.playerDataConfirmed = false;
         console.log("Intro animation finished. Joining game...");
@@ -1070,75 +1073,42 @@ class Game {
         duration: 500,
         easing: 'linear'
       }, '-=400') // Overlap with particles fade-in
+      // Welcome text appears
+      .add({
+        targets: welcomeTextElement,
+        opacity: [0, 1],
+        translateY: [20, 0],
+        duration: 1000,
+        easing: 'easeOutExpo'
+      }, '-=200')
       // Player appears
       .add({
         targets: playerElement,
         opacity: [0, 1],
         transform: ['translate(0, 0) scale(0.5)', 'translate(0, 0) scale(1)'],
         duration: 1000,
-      }, '-=300') // Overlap slightly with fade in
-      // Name appears above player
+      }, '-=300') // Overlap slightly with welcome text
+      // Name appears below player
       .add({
-          targets: textElement,
-          opacity: [0, 1],
-          duration: 800,
-          easing: 'easeOutExpo'
+        targets: textElement,
+        opacity: [0, 1],
+        duration: 800,
+        easing: 'easeOutExpo'
       }, '-=700') // Overlap with player appearance
       
-      // Enemies fly out to their orbits
+      // Hold everything visible for a moment
       .add({
-          targets: '.intro-enemy',
-          transform: (el) => {
-              const radius = parseFloat(el.dataset.orbitRadius);
-              const angle = parseFloat(el.dataset.initialAngle) * (Math.PI / 180);
-              const x = Math.cos(angle) * radius;
-              const y = Math.sin(angle) * radius;
-              return `translate(${x}px, ${y}px) scale(1)`;
-          },
-          opacity: [0, 1],
-          delay: anime.stagger(100, { start: 500 }),
-          duration: 1500,
-          easing: 'easeOutExpo'
-      }, 300) // Start after overlay fade and player starts appearing
-
-      // Orbiting animation - using a dummy target and update callback
-      .add({
-          targets: { angle: 0 }, // Dummy object to animate angle property
-          angle: (el) => 360 * 2, // Rotate twice
-          duration: orbitDuration,
-          easing: 'linear', // Constant speed orbit
-          update: function(anim) {
-              document.querySelectorAll('.intro-enemy').forEach(el => {
-                  const radius = parseFloat(el.dataset.orbitRadius);
-                  const speedFactor = parseFloat(el.dataset.speed);
-                  const initialAngle = parseFloat(el.dataset.initialAngle);
-                  const currentAngleRad = (initialAngle + (anim.progress / 100 * 360 * 2 * speedFactor)) * (Math.PI / 180); // Use animated angle % + speed factor
-                  
-                  const x = Math.cos(currentAngleRad) * radius;
-                  const y = Math.sin(currentAngleRad) * radius;
-                  
-                  el.style.transform = `translate(${x}px, ${y}px) scale(1)`;
-              });
-          }
-      }, '-=1000') // Start orbiting while they are still flying out
+        targets: {},
+        duration: 1000
+      })
 
       // Fade out everything before completion
       .add({
-          targets: ['#intro-player', '#intro-text'],
-          opacity: 0,
-          transform: ['translate(0, 0) scale(1)', 'translate(0, 0) scale(0.8)'],
-          duration: 800,
-          easing: 'easeInExpo'
-      }, `-=${orbitDuration * 0.3}`) // Start fade out during the last 30% of orbit
-
-      // Separate fade-out for enemies with transform
-      .add({
-          targets: '.intro-enemy',
-          opacity: 0,
-          // Don't touch transform as it's being controlled by the orbit animation
-          duration: 800,
-          easing: 'easeInExpo'
-      }, `-=${orbitDuration * 0.3}`) // Same timing as other elements
+        targets: [welcomeTextElement, playerElement, textElement],
+        opacity: 0,
+        duration: 800,
+        easing: 'easeInExpo'
+      })
 
       .add({
         targets: introOverlay,
