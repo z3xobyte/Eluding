@@ -233,6 +233,46 @@
             ::-webkit-scrollbar-thumb:hover {
                 background: #555;
             }
+
+            #changelog {
+                position: absolute;
+                left: 20px; /* Changed from right */
+                top: 20px;  /* Changed from 50% transform */
+                color: #fff; /* Changed back to white */
+                font-family: "Baloo Paaji 2", "Ubuntu", Arial, Helvetica, sans-serif; /* Ensured Baloo Paaji 2 is primary */
+                font-weight: 500; /* Added default weight for Baloo Paaji 2 */
+                text-align: left;
+                z-index: 1001; /* Keep z-index */
+                font-size: 18px; /* Adjust base font size */
+                line-height: 1.5; /* Adjust line spacing */
+                text-shadow: 1px 1px 3px rgba(0, 0, 0, 0.8); /* Added dark text shadow for contrast */
+            }
+            
+            #changelog p {
+                margin-bottom: 10px; /* Add some space between paragraphs */
+            }
+
+            #changelog .last-modified {
+                font-weight: bold; /* Re-added bold */
+            }
+
+            #changelog .update-item {
+                margin-left: 15px; /* Indent bullet point */
+                text-indent: -15px; /* Align text after bullet */
+            }
+            
+            #changelog .discord-link {
+                display: flex;
+                align-items: center;
+                gap: 5px; /* Space between text and icon */
+            }
+            
+            /* Added style for the discord icon image */
+            #changelog .discord-link img {
+                height: 25px; /* Set height */
+                width: auto;  /* Auto width to maintain aspect ratio */
+                vertical-align: middle; /* Keep vertical alignment */
+            }
         </style>
     </head>
     <body>
@@ -248,6 +288,19 @@
             />
             <button id="play">Play</button>
             <p id="status"></p>
+            
+            <div id="changelog">
+                <p class="last-modified">Last modified: Aug 19 2022</p>
+                <p class="update-item">* Improved the client</p>
+                <p>No more updates are due to arrive in the nearest future.<br>
+                   Minimap is nearly done, but I wasn't able to finish it<br>
+                   in time, so it will not be added anytime soon. Sorry.</p>
+                <p>Before reporting any problems, please make sure you've seen<br>
+                   the tutorial (spawn in & press T). If you have, and you can't<br>
+                   move with WASD or press SHIFT, go to settings (ESC by default),<br>
+                   scroll down, and change the keybinds to your liking, then try again.</p>
+                <p class="discord-link">Join our Discord server: <img src="discord_icon.png" alt="Discord"></img></p>
+            </div>
         </div>
 
         <div id="indicators">
