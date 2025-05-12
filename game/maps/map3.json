@@ -1,4 +1,3 @@
-
 {
   "width": 60,
   "height": 13,
@@ -60,6 +59,10 @@
     }
   },
   "teleporterCodes": [
+    {
+      "code": "area2_area3",
+      "mapId": "map2"
+    },
     {
       "code": "area3_area4",
       "mapId": "map4"

@@ -60,6 +60,10 @@
     },
     "teleporterCodes": [
       {
+        "code": "area8_area9",
+        "mapId": "map8"
+      },
+      {
         "code": "area9_area10",
         "mapId": "map10"
       }
