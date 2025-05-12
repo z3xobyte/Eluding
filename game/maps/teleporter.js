@@ -25,6 +25,7 @@ class TeleporterManager {
   constructor() {
     this.teleportersByPosition = new Map();
     this.teleportersByCode = new Map();
+    this.teleporterLinks = [];
   }
 
   addTeleporter(teleporter) {
@@ -48,6 +49,57 @@ class TeleporterManager {
     const teleporter = this.teleportersByCode.get(code) || null;
     console.log(`Looking for teleporter with code ${code}: ${teleporter ? 'FOUND' : 'NOT FOUND'}`);
     return teleporter;
+  }
+
+  getTeleporterByLink(tileX, tileY, mapIndex = null) {
+    const fromKey = mapIndex !== null ? `${mapIndex},${tileX},${tileY}` : `0,${tileX},${tileY}`;
+    
+    const link = this.teleporterLinks.find(link => link.fromKey === fromKey);
+    
+    if (link) {
+      console.log(`Found teleporter link from ${fromKey} to ${link.toKey}`);
+      
+      const [toMapIndex, toX, toY] = link.toKey.split(',').map(Number);
+      
+      const destinationTeleporter = new Teleporter(toX, toY);
+      destinationTeleporter.targetMapIndex = toMapIndex;
+      return {
+        teleporter: destinationTeleporter,
+        mapIndex: toMapIndex
+      };
+    }
+    
+    return null;
+  }
+
+  setTeleporterLinks(links) {
+    if (!links || !Array.isArray(links)) {
+      console.log("No teleporter links to set or invalid format");
+      return;
+    }
+    
+    this.teleporterLinks = links;
+    console.log(`Set ${links.length} teleporter links`);
+    
+    links.forEach(link => {
+      const [fromMapIndex, fromX, fromY] = link.fromKey.split(',').map(Number);
+      const [toMapIndex, toX, toY] = link.toKey.split(',').map(Number);
+      
+      const fromPosition = `${fromX}_${fromY}`;
+      const toCode = `map${fromMapIndex}_to_map${toMapIndex}`;
+      
+      let teleporter = this.teleportersByPosition.get(fromPosition);
+      if (!teleporter) {
+        teleporter = new Teleporter(fromX, fromY, toCode, `map${toMapIndex}`);
+        this.addTeleporter(teleporter);
+      } else {
+        if (!teleporter.code) {
+          teleporter.code = toCode;
+          teleporter.mapId = `map${toMapIndex}`;
+          this.teleportersByCode.set(toCode, teleporter);
+        }
+      }
+    });
   }
 
   associateTeleporterCodes(teleporterCodes) {

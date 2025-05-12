@@ -23,6 +23,16 @@ class GameMap {
     
     this.findTeleporterTiles();
     
+    // Set teleporter links if provided
+    if (mapConfig.teleporterLinks && mapConfig.teleporterLinks.length > 0) {
+      this.teleporterLinks = mapConfig.teleporterLinks;
+      this.teleporterManager.setTeleporterLinks(this.teleporterLinks);
+      console.log(`Initialized ${this.teleporterLinks.length} teleporter links for map ${this.mapId || 'unknown'}`);
+    } else {
+      this.teleporterLinks = [];
+    }
+    
+    // Continue with the original teleporter codes for backward compatibility
     if (mapConfig.teleporterCodes && mapConfig.teleporterCodes.length > 0) {
       this.teleporterCodes = mapConfig.teleporterCodes;
       this.teleporterManager.associateTeleporterCodes(this.teleporterCodes);
@@ -120,6 +130,11 @@ class GameMap {
 
   getTeleporterByCode(code) {
     return this.teleporterManager.getTeleporterByCode(code);
+  }
+  
+  // New method to get teleporter using the new link format
+  getTeleporterByLink(tileX, tileY, mapIndex) {
+    return this.teleporterManager.getTeleporterByLink(tileX, tileY, mapIndex);
   }
 
   findConnectedRegions(tileType) {
