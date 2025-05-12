@@ -6,7 +6,7 @@
     "spawnTileType": 1,
     "types": {
       "basic": {
-        "count": 50,
+        "count": 150,
         "radius": 30,
         "minSpeed": 4,
         "maxSpeed": 4
