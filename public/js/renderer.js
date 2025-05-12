@@ -397,6 +397,7 @@ export class Renderer {
           this.ctx.arc(p.x, p.y, p.radius, 0, Math.PI * 2);
           hasDeadPlayerStrokes = true;
         }
+
       }
     }
     if (hasDeadPlayerStrokes) {

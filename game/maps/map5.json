@@ -24,21 +24,21 @@
           "bulletSpeed": 5
         },
         "dasher": {
-          "count": 0,
-          "radius": 15,
-          "minSpeed": 5,
-          "maxSpeed": 8,
+          "count": 3,
+          "radius": 70,
+          "minSpeed": 20,
+          "maxSpeed": 25,
           "timeToPrepare": 750,
           "timeToDash": 3000,
-          "timeBetweenDashes": 750
+          "timeBetweenDashes": 1450
         },
         "homing": {
-          "count": 100,
-          "radius": 18,
-          "minSpeed": 4,
-          "maxSpeed": 10,
-          "turnIncrement": 0.05,
-          "homeRange": 200
+          "count": 30,
+          "radius": 15,
+          "minSpeed": 2,
+          "maxSpeed": 3,
+          "turnIncrement": 0.03,
+          "homeRange": 130
         },
         "void_crawler": {
           "count": 0,
