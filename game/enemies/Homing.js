@@ -1,5 +1,4 @@
 const { Enemy } = require('./BaseEnemy');
-const { isPlayerInProtectedTile } = require('../enemy');
 
 class Homing extends Enemy {
   constructor(x, y, radius, speed, increment = 0.05, homeRange = 200) {
@@ -16,13 +15,13 @@ class Homing extends Enemy {
     const deltaTimeMs = currentTimeMs - this.lastUpdateTimeMs;
     this.lastUpdateTimeMs = currentTimeMs;
     
-    this.behavior(deltaTimeMs, game); 
+    this.behavior(deltaTimeMs, game, map); 
     super.update(map, grid); 
   }
   
-  behavior(time, game) {
+  behavior(time, game, map) {
     this.angle = Math.atan2(this.vy, this.vx);
-    const closestPlayer = this.findClosestPlayer(game);
+    const closestPlayer = this.findClosestPlayer(game, map);
     if (closestPlayer) {
       const dX = closestPlayer.x - this.x;
       const dY = closestPlayer.y - this.y;
@@ -40,7 +39,7 @@ class Homing extends Enemy {
     this.vy = Math.sin(this.angle) * this.speed;
   }
   
-  findClosestPlayer(game) {
+  findClosestPlayer(game, map) {
     if (!game || !game.players) return null;
     let closestPlayer = null;
     let minDistanceSq = this.homeRangeSq; 
@@ -49,7 +48,7 @@ class Homing extends Enemy {
       if (player.isDead || player.currentMapId !== game.currentMapId) continue;
       
       // Skip players in protected tiles (safe zones and teleporters)
-      if (isPlayerInProtectedTile(player, game)) continue;
+      if (this.isPlayerInProtectedTile(player, game, map)) continue;
       
       const dx = player.x - this.x;
       const dy = player.y - this.y;
@@ -60,6 +59,20 @@ class Homing extends Enemy {
       }
     }
     return closestPlayer;
+  }
+  
+  // Helper function to check if a player is in a protected tile
+  isPlayerInProtectedTile(player, game, map) {
+    if (!player || !game) return true;
+    
+    const currentMap = map || game.mapManager.getMapById(player.currentMapId);
+    if (!currentMap) return true;
+    
+    const tileX = Math.floor(player.x / currentMap.tileSize);
+    const tileY = Math.floor(player.y / currentMap.tileSize);
+    
+    const tileType = currentMap.getTileType(tileX, tileY);
+    return tileType === 2 || tileType === 3 || tileType === 4;
   }
   
   serialize() {

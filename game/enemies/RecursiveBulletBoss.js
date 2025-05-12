@@ -1,6 +1,5 @@
 const { Enemy } = require('./BaseEnemy');
 const { RecursiveBullet } = require('./RecursiveBullet');
-const { isPlayerInProtectedTile } = require('../enemy');
 
 class RecursiveBulletBoss extends Enemy {
   constructor(x, y, radius, speed, shootCooldown = 120, bulletRadius = 8, bulletSpeed = 4, recursionLevels = 2) {
@@ -45,7 +44,7 @@ class RecursiveBulletBoss extends Enemy {
     // Ready to shoot
     if (game && this.shootCooldown === 0) {
       // Check if there's any player not in protected tile
-      const hasTargetablePlayer = this.hasTargetablePlayer(game);
+      const hasTargetablePlayer = this.hasTargetablePlayer(game, map);
       
       // Only fire if there's at least one targetable player
       if (hasTargetablePlayer) {
@@ -56,15 +55,29 @@ class RecursiveBulletBoss extends Enemy {
     }
   }
   
-  hasTargetablePlayer(game) {
+  hasTargetablePlayer(game, map) {
     if (!game || !game.players) return false;
     
     for (const player of game.players.values()) {
       if (player.isDead || player.currentMapId !== game.currentMapId) continue;
-      if (!isPlayerInProtectedTile(player, game)) return true;
+      if (!this.isPlayerInProtectedTile(player, game, map)) return true;
     }
     
     return false;
+  }
+  
+  // Helper function to check if a player is in a protected tile
+  isPlayerInProtectedTile(player, game, map) {
+    if (!player || !game) return true;
+    
+    const currentMap = map || game.mapManager.getMapById(player.currentMapId);
+    if (!currentMap) return true;
+    
+    const tileX = Math.floor(player.x / currentMap.tileSize);
+    const tileY = Math.floor(player.y / currentMap.tileSize);
+    
+    const tileType = currentMap.getTileType(tileX, tileY);
+    return tileType === 2 || tileType === 3 || tileType === 4;
   }
   
   fireSpiral(bulletCount, grid, game) {

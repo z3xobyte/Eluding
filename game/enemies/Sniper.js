@@ -1,6 +1,5 @@
 const { Enemy } = require('./BaseEnemy');
 const { Bullet } = require('./Bullet');
-const { isPlayerInProtectedTile } = require('../enemy');
 
 class Sniper extends Enemy {
   constructor(x, y, radius, speed, detectionRange = 500, shootingRange = 400, maxShootCooldown = 100, bulletRadius = 5, bulletSpeed = 5) {
@@ -31,7 +30,7 @@ class Sniper extends Enemy {
         if (player.isDead || player.currentMapId !== game.currentMapId) continue;
         
         // Skip players in protected tiles (safe zones and teleporters)
-        if (isPlayerInProtectedTile(player, game)) continue;
+        if (this.isPlayerInProtectedTile(player, game, map)) continue;
         
         const dx = player.x - this.x;
         const dy = player.y - this.y;
@@ -64,6 +63,20 @@ class Sniper extends Enemy {
         this.lastTargetY = null;
       }
     }
+  }
+  
+  // Helper function to check if a player is in a protected tile
+  isPlayerInProtectedTile(player, game, map) {
+    if (!player || !game) return true;
+    
+    const currentMap = map || game.mapManager.getMapById(player.currentMapId);
+    if (!currentMap) return true;
+    
+    const tileX = Math.floor(player.x / currentMap.tileSize);
+    const tileY = Math.floor(player.y / currentMap.tileSize);
+    
+    const tileType = currentMap.getTileType(tileX, tileY);
+    return tileType === 2 || tileType === 3 || tileType === 4;
   }
   
   serialize() {

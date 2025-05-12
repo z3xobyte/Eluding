@@ -1,5 +1,4 @@
 const { Enemy } = require('./BaseEnemy');
-const { isPlayerInProtectedTile } = require('../enemy');
 
 class VoidCrawler extends Enemy {
   constructor(x, y, radius, speed, increment = 0.05, homeRange = 200) {
@@ -29,11 +28,11 @@ class VoidCrawler extends Enemy {
     const currentTimeMs = Date.now();
     const deltaTimeMs = currentTimeMs - this.lastUpdateTimeMs;
     this.lastUpdateTimeMs = currentTimeMs;
-    this.behavior(deltaTimeMs, game);
+    this.behavior(deltaTimeMs, game, map);
     super.update(map, grid);
   }
   
-  behavior(time, game) {
+  behavior(time, game, map) {
     if (this.time_preparing === 0) {
       if (this.time_lurching === 0) {
         if (this.time_since_last_lurch < this.time_between_lurches) {
@@ -65,7 +64,7 @@ class VoidCrawler extends Enemy {
     this.compute_speed();
 
     this.angle = Math.atan2(this.vy, this.vx);
-    const closestPlayer = this.findClosestPlayer(game);
+    const closestPlayer = this.findClosestPlayer(game, map);
     if (closestPlayer) {
       const dX = closestPlayer.x - this.x;
       const dY = closestPlayer.y - this.y;
@@ -87,7 +86,7 @@ class VoidCrawler extends Enemy {
     this.speed = Math.max(0, this.base_speed); 
   }
   
-  findClosestPlayer(game) {
+  findClosestPlayer(game, map) {
     if (!game || !game.players) return null;
     let closestPlayer = null;
     let minDistanceSq = this.homeRangeSq;
@@ -96,7 +95,7 @@ class VoidCrawler extends Enemy {
       if (player.isDead || player.currentMapId !== game.currentMapId) continue;
       
       // Skip players in protected tiles (safe zones and teleporters)
-      if (isPlayerInProtectedTile(player, game)) continue;
+      if (this.isPlayerInProtectedTile(player, game, map)) continue;
       
       const dx = player.x - this.x;
       const dy = player.y - this.y;
@@ -109,10 +108,24 @@ class VoidCrawler extends Enemy {
     return closestPlayer;
   }
   
+  // Helper function to check if a player is in a protected tile
+  isPlayerInProtectedTile(player, game, map) {
+    if (!player || !game) return true;
+    
+    const currentMap = map || game.mapManager.getMapById(player.currentMapId);
+    if (!currentMap) return true;
+    
+    const tileX = Math.floor(player.x / currentMap.tileSize);
+    const tileY = Math.floor(player.y / currentMap.tileSize);
+    
+    const tileType = currentMap.getTileType(tileX, tileY);
+    return tileType === 2 || tileType === 3 || tileType === 4;
+  }
+  
   serialize() {
     const baseData = super.serialize();
     return { ...baseData, time_preparing: this.time_preparing, time_lurching: this.time_lurching, time_since_last_lurch: this.time_since_last_lurch, angle: this.angle, targetAngle: this.targetAngle };
   }
 }
 
-module.exports = { VoidCrawler }; 
+module.exports = { VoidCrawler };
