@@ -1101,21 +1101,21 @@
                 const mapData = maps[mapIndex];
                 const mapTiles = mapIndex === currentMapIndex ? tiles : mapData.tiles;
                 if (!mapTiles || mapTiles.length === 0) return;
-                
+
                 const tileSize = mapData.tileSize * scale;
                 for (let y = 0; y < mapData.height; y++) {
                     for (let x = 0; x < mapData.width; x++) {
                         if (mapTiles[y] && typeof mapTiles[y][x] !== 'undefined') {
                             const tileType = mapTiles[y][x];
-                            drawTile(
-                                x * tileSize,
-                                y * tileSize,
-                                tileSize,
-                                tileType,
+                        drawTile(
+                            x * tileSize,
+                            y * tileSize,
+                            tileSize,
+                            tileType,
                                 ctx
-                            );
-                        }
+                        );
                     }
+                }
                 }
                 
                 // Draw grid
@@ -1353,7 +1353,7 @@
             function importMap(jsonData) {
                 try {
                     const data = JSON.parse(jsonData);
-                    
+
                     // Check if this is a single map or multiple maps
                     if (Array.isArray(data)) {
                         // This is multiple maps - replace all maps
@@ -1390,7 +1390,7 @@
             }
             
             function importSingleMap(mapData) {
-                // Handle mapData structure updates
+                    // Handle mapData structure updates
                 ensureMapDataStructure(mapData);
                 
                 // Check if a map with this ID already exists
@@ -1440,76 +1440,76 @@
                 
                 // Handle mapData structure updates
                 if (!mapData.enemyConfig.types) {
-                    // Convert old format to new format
+                        // Convert old format to new format
                     mapData.enemyConfig = {
                         spawnTileType: mapData.enemyConfig.spawnTileType || 1,
-                        types: {
-                            basic: {
+                            types: {
+                                basic: {
                                 count: mapData.enemyConfig.count || 10,
                                 radius: mapData.enemyConfig.radius || 15,
                                 minSpeed: mapData.enemyConfig.minSpeed || 5,
                                 maxSpeed: mapData.enemyConfig.maxSpeed || 8,
+                                },
+                                sniper: {
+                                    count: 0,
+                                    radius: 15,
+                                    minSpeed: 3,
+                                    maxSpeed: 5,
+                                    detectionRange: 500,
+                                    shootingRange: 400,
+                                    maxShootCooldown: 100,
+                                    bulletRadius: 5,
+                                    bulletSpeed: 5,
+                                },
+                                dasher: {
+                                    count: 0,
+                                    radius: 15,
+                                    minSpeed: 5,
+                                    maxSpeed: 8,
+                                    timeToPrepare: 750,
+                                    timeToDash: 3000,
+                                    timeBetweenDashes: 750,
+                                },
+                                homing: {
+                                    count: 0,
+                                    radius: 15,
+                                    minSpeed: 4,
+                                    maxSpeed: 6,
+                                    turnIncrement: 0.05,
+                                    homeRange: 200,
+                                },
+                                void_crawler: {
+                                    count: 0,
+                                    radius: 15,
+                                    minSpeed: 4,
+                                    maxSpeed: 6,
+                                    turnIncrement: 0.05,
+                                    homeRange: 200,
+                                },
+                                wall: {
+                                    count: 0,
+                                    radius: 15,
+                                    minSpeed: 3,
+                                    maxSpeed: 5,
+                                    moveClockwise: true,
+                                    patternAlternate: false,
+                                    initialSide: 0,
+                                },
                             },
-                            sniper: {
-                                count: 0,
-                                radius: 15,
-                                minSpeed: 3,
-                                maxSpeed: 5,
-                                detectionRange: 500,
-                                shootingRange: 400,
-                                maxShootCooldown: 100,
-                                bulletRadius: 5,
-                                bulletSpeed: 5,
-                            },
-                            dasher: {
-                                count: 0,
-                                radius: 15,
-                                minSpeed: 5,
-                                maxSpeed: 8,
-                                timeToPrepare: 750,
-                                timeToDash: 3000,
-                                timeBetweenDashes: 750,
-                            },
-                            homing: {
-                                count: 0,
-                                radius: 15,
-                                minSpeed: 4,
-                                maxSpeed: 6,
-                                turnIncrement: 0.05,
-                                homeRange: 200,
-                            },
-                            void_crawler: {
-                                count: 0,
-                                radius: 15,
-                                minSpeed: 4,
-                                maxSpeed: 6,
-                                turnIncrement: 0.05,
-                                homeRange: 200,
-                            },
-                            wall: {
-                                count: 0,
-                                radius: 15,
-                                minSpeed: 3,
-                                maxSpeed: 5,
-                                moveClockwise: true,
-                                patternAlternate: false,
-                                initialSide: 0,
-                            },
-                        },
-                    };
-                }
+                        };
+                    }
 
-                // Ensure all enemy types exist
-                const requiredTypes = [
-                    "basic",
-                    "sniper",
-                    "dasher",
-                    "homing",
-                    "void_crawler",
-                    "wall",
-                ];
+                    // Ensure all enemy types exist
+                    const requiredTypes = [
+                        "basic",
+                        "sniper",
+                        "dasher",
+                        "homing",
+                        "void_crawler",
+                        "wall",
+                    ];
                 
-                requiredTypes.forEach((type) => {
+                    requiredTypes.forEach((type) => {
                     if (!mapData.enemyConfig.types[type]) {
                         mapData.enemyConfig.types[type] = maps[0].enemyConfig.types[type];
                     }
@@ -1884,17 +1884,17 @@
                 document.getElementById("copyJsonBtn").addEventListener("click", () => {
                     const jsonOutput = document.getElementById("jsonOutput");
                     navigator.clipboard.writeText(jsonOutput.textContent)
-                        .then(() => {
-                            alert("JSON copied to clipboard");
-                        })
-                        .catch((err) => {
-                            console.error("Failed to copy: ", err);
-                        });
-                });
+                            .then(() => {
+                                alert("JSON copied to clipboard");
+                            })
+                            .catch((err) => {
+                                console.error("Failed to copy: ", err);
+                            });
+                    });
                 
                 document.getElementById("loadJsonBtn").addEventListener("click", () => {
-                    const jsonInput = document.getElementById("jsonInput");
-                    if (importMap(jsonInput.value)) {
+                        const jsonInput = document.getElementById("jsonInput");
+                        if (importMap(jsonInput.value)) {
                         document.getElementById("importExportModal").style.display = "none";
                     }
                 });
@@ -1911,9 +1911,9 @@
                 
                 document.getElementById("clearMapBtn").addEventListener("click", () => {
                     if (confirm(`Are you sure you want to clear ${maps[currentMapIndex].id}?`)) {
-                        initMap();
-                    }
-                });
+                            initMap();
+                        }
+                    });
                 
                 window.addEventListener("resize", () => {
                     resizeCanvases();
