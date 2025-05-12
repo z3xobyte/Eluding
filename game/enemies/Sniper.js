@@ -1,5 +1,6 @@
 const { Enemy } = require('./BaseEnemy');
 const { Bullet } = require('./Bullet');
+const { isPlayerInProtectedTile } = require('../enemy');
 
 class Sniper extends Enemy {
   constructor(x, y, radius, speed, detectionRange = 500, shootingRange = 400, maxShootCooldown = 100, bulletRadius = 5, bulletSpeed = 5) {
@@ -28,6 +29,9 @@ class Sniper extends Enemy {
 
       for (const player of players.values()) {
         if (player.isDead || player.currentMapId !== game.currentMapId) continue;
+        
+        // Skip players in protected tiles (safe zones and teleporters)
+        if (isPlayerInProtectedTile(player, game)) continue;
         
         const dx = player.x - this.x;
         const dy = player.y - this.y;

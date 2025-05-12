@@ -34,6 +34,20 @@ function getGrid() {
   return gridInstance;
 }
 
+// Helper function to check if a player is in a protected tile (2, 3, or 4)
+function isPlayerInProtectedTile(player, game) {
+  if (!player || !game || !game.mapManager) return true;
+  
+  const map = game.mapManager.getMapById(player.currentMapId);
+  if (!map) return true;
+  
+  const tileX = Math.floor(player.x / map.tileSize);
+  const tileY = Math.floor(player.y / map.tileSize);
+  
+  const tileType = map.getTileType(tileX, tileY);
+  return tileType === 2 || tileType === 3 || tileType === 4;
+}
+
 Enemy.initializeGridWithMap = function(map) {
   const effectiveCellSize = map.tileSize || 64;
   gridInstance = new Grid(map.width * map.tileSize, map.height * map.tileSize, effectiveCellSize);
@@ -52,5 +66,6 @@ module.exports = {
   initializeGridWithMap: Enemy.initializeGridWithMap,
   bulkAddToGrid: Enemy.bulkAddToGrid,
   getGrid,
-  MS_PER_GAME_TICK
+  MS_PER_GAME_TICK,
+  isPlayerInProtectedTile
 };

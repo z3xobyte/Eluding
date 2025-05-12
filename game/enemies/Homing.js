@@ -1,4 +1,5 @@
 const { Enemy } = require('./BaseEnemy');
+const { isPlayerInProtectedTile } = require('../enemy');
 
 class Homing extends Enemy {
   constructor(x, y, radius, speed, increment = 0.05, homeRange = 200) {
@@ -46,6 +47,10 @@ class Homing extends Enemy {
     
     for (const player of game.players.values()) {
       if (player.isDead || player.currentMapId !== game.currentMapId) continue;
+      
+      // Skip players in protected tiles (safe zones and teleporters)
+      if (isPlayerInProtectedTile(player, game)) continue;
+      
       const dx = player.x - this.x;
       const dy = player.y - this.y;
       const distanceSq = dx * dx + dy * dy;

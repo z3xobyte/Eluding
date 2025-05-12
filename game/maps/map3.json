@@ -6,13 +6,13 @@
     "spawnTileType": 1,
     "types": {
       "basic": {
-        "count": 50,
+        "count": 40,
         "radius": 15,
         "minSpeed": 5,
         "maxSpeed": 8
       },
       "sniper": {
-        "count": 20,
+        "count": 10,
         "radius": 15,
         "minSpeed": 3,
         "maxSpeed": 5,
@@ -23,7 +23,7 @@
         "bulletSpeed": 5
       },
       "dasher": {
-        "count": 0,
+        "count": 5,
         "radius": 15,
         "minSpeed": 5,
         "maxSpeed": 8,
@@ -44,14 +44,14 @@
         "radius": 15,
         "minSpeed": 4,
         "maxSpeed": 6,
-        "turnIncrement": 0.05,
+        "turnIncrement": 0.01,
         "homeRange": 200
       },
       "wall": {
         "count": 50,
-        "radius": 15,
-        "minSpeed": 5,
-        "maxSpeed": 5,
+        "radius": 25,
+        "minSpeed": 1,
+        "maxSpeed": 1,
         "moveClockwise": true,
         "patternAlternate": true,
         "initialSide": 0

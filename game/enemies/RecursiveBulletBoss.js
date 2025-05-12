@@ -1,5 +1,6 @@
 const { Enemy } = require('./BaseEnemy');
 const { RecursiveBullet } = require('./RecursiveBullet');
+const { isPlayerInProtectedTile } = require('../enemy');
 
 class RecursiveBulletBoss extends Enemy {
   constructor(x, y, radius, speed, shootCooldown = 120, bulletRadius = 8, bulletSpeed = 4, recursionLevels = 2) {
@@ -43,10 +44,27 @@ class RecursiveBulletBoss extends Enemy {
 
     // Ready to shoot
     if (game && this.shootCooldown === 0) {
-      // Rotating shot pattern
-      this.fireSpiral(6, grid, game);
-      this.shootCooldown = this.maxShootCooldown;
+      // Check if there's any player not in protected tile
+      const hasTargetablePlayer = this.hasTargetablePlayer(game);
+      
+      // Only fire if there's at least one targetable player
+      if (hasTargetablePlayer) {
+        // Rotating shot pattern
+        this.fireSpiral(6, grid, game);
+        this.shootCooldown = this.maxShootCooldown;
+      }
     }
+  }
+  
+  hasTargetablePlayer(game) {
+    if (!game || !game.players) return false;
+    
+    for (const player of game.players.values()) {
+      if (player.isDead || player.currentMapId !== game.currentMapId) continue;
+      if (!isPlayerInProtectedTile(player, game)) return true;
+    }
+    
+    return false;
   }
   
   fireSpiral(bulletCount, grid, game) {
