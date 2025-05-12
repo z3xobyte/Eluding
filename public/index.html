@@ -4,12 +4,16 @@
         <meta charset="UTF-8" />
         <meta name="viewport" content="width=device-width, initial-scale=1.0" />
         <title>Eluding</title>
+        <link rel="stylesheet" href="css/style.css">
+        <link href="https://fonts.googleapis.com/css2?family=Baloo+Paaji+2:wght@400..800&display=swap" rel="stylesheet">
+        <script src="https://cdnjs.cloudflare.com/ajax/libs/animejs/3.2.1/anime.min.js"></script>
+        <script src="https://cdn.jsdelivr.net/particles.js/2.0.0/particles.min.js"></script>
         <style>
             @import url("https://fonts.googleapis.com/css2?family=Baloo+Paaji+2:wght@400..800&display=swap");
 
             * {
                 font-weight: 700;
-                font-family: "Ubuntu", Arial, Helvetica, sans-serif;
+                font-family: "Baloo Paaji 2", "Ubuntu", Arial, Helvetica, sans-serif;
                 text-decoration: none;
             }
 
@@ -144,7 +148,7 @@
             #fpsDisplay {
                 /* Retain original FPS display styling */
                 color: white;
-                font-family: "Courier New", monospace;
+                font-family: "Baloo Paaji 2", "Courier New", monospace;
                 font-size: 14px;
                 background-color: rgba(0, 0, 0, 0.5);
                 padding: 5px 10px;
@@ -157,7 +161,7 @@
                 margin-top: 0px; /* Original was 5px, reset if using #ping directly */
                 position: relative; /* Changed from absolute if it's inside #indicators */
                 color: white;
-                font-family: "Courier New", monospace;
+                font-family: "Baloo Paaji 2", "Courier New", monospace;
                 font-size: 14px;
                 background-color: rgba(0, 0, 0, 0.5);
                 padding: 5px 10px;
@@ -192,11 +196,11 @@
 
             #messages p {
                 /* Individual chat messages */
-                margin: 0 0 5px 5px; /* Adjusted margin */
+                margin: 0 0 2px 5px; /* Reduced bottom margin from 5px to 2px */
                 font-size: 16px; /* Increased font size */
-                font-family:
-                    "Ubuntu", Tahoma, Arial, Verdana, Segoe, sans-serif; /* Prioritize Ubuntu */
+                font-family: "Baloo Paaji 2", "Ubuntu", Arial, Helvetica, sans-serif; /* Use Baloo Paaji 2 */
                 font-weight: normal; /* Override * rule for chat messages */
+                line-height: 1.2; /* Add compact line height */
             }
 
             #send {
@@ -217,6 +221,7 @@
                 width: 350px; /* Original #chat was 350px, input was 100% of that */
                 box-sizing: border-box;
                 font-size: 16px; /* Readable font size */
+                font-family: "Baloo Paaji 2", "Ubuntu", Arial, Helvetica, sans-serif; /* Add Baloo Paaji 2 font */
             }
 
             /* Scrollbar styling */
@@ -276,7 +281,12 @@
         </style>
     </head>
     <body>
-        <canvas id="gameCanvas"></canvas>
+        <div id="intro-overlay">
+            <div id="particles-js"></div>
+            <div id="intro-orbit-container"></div>
+            <div id="intro-player"></div>
+            <div id="intro-text">Entering the Galaxy...</div>
+        </div>
 
         <div id="menu">
             <h1 id="splash">Eluding</h1>
@@ -290,15 +300,11 @@
             <p id="status"></p>
             
             <div id="changelog">
-                <p class="last-modified">Last modified: Aug 19 2022</p>
+                <p class="last-modified">Last modified: 5/12/2025</p>
                 <p class="update-item">* Improved the client</p>
-                <p>No more updates are due to arrive in the nearest future.<br>
+                <p>More updates are due to arrive in the nearest future.<br>
                    Minimap is nearly done, but I wasn't able to finish it<br>
-                   in time, so it will not be added anytime soon. Sorry.</p>
-                <p>Before reporting any problems, please make sure you've seen<br>
-                   the tutorial (spawn in & press T). If you have, and you can't<br>
-                   move with WASD or press SHIFT, go to settings (ESC by default),<br>
-                   scroll down, and change the keybinds to your liking, then try again.</p>
+                   in time, so it will not be added soon. Sorry.</p>
                 <p class="discord-link">Join our Discord server: <img src="discord_icon.png" alt="Discord"></img></p>
             </div>
         </div>
@@ -315,6 +321,8 @@
         <div id="send">
             <input type="text" id="sendmsg" placeholder="Press enter to chat" />
         </div>
+
+        <canvas id="gameCanvas"></canvas>
 
         <script src="js/game.js" type="module"></script>
     </body>

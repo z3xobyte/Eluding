@@ -301,7 +301,7 @@ export class Network {
   }
   
   updatePingDisplay() {
-    const pingDisplay = document.getElementById('pingDisplay');
+    const pingDisplay = document.getElementById('ping');
     if (pingDisplay) {
       pingDisplay.textContent = `Ping: ${this.ping} ms`;
     }

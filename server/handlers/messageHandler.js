@@ -57,13 +57,14 @@ function handleChatMessage(game, ws, player, message, broadcast) {
     // Player hasn't fully joined, ignore chat attempts
     return;
   }
-  if (message && message.trim() === "/reset") {
+  if (message && (message.trim() === "/reset" || message.trim() === "/r")) {
     handleResetCommand(game, ws, player);
   } else if (message) {
     const chatMessageObject = {
       type: "chat",
       sender: player.name, // Use player's chosen name
       message: message.substring(0, config.MAX_CHAT_MESSAGE_LENGTH),
+      // No color for regular player messages
     };
     const chatMessageString = JSON.stringify(chatMessageObject);
     ws.send(chatMessageString);
@@ -210,6 +211,15 @@ async function handleJoinGame(game, ws, player, name, broadcast) {
       Buffer.from(fullInitDataString),
     );
     ws.send(compressedFullInitData, { binary: true });
+
+    // Send welcome message in red
+    const welcomeMessage = JSON.stringify({
+      type: "chat",
+      sender: "[SERVER]",
+      message: "Welcome to Eluding! Type /reset or /r in chat to respawn.",
+      color: "#ffceb7" // Red color
+    });
+    ws.send(welcomeMessage);
 
     console.log(
       `Player ${player.name} (${player.id}) joined game on map ${player.currentMapId}.`,

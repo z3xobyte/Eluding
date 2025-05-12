@@ -86,19 +86,18 @@ class Game {
       const name = this.nameInputElement.value.trim();
       if (name && name.length > 0 && name.length <= 16) {
         this.playerName = name;
-        this.isGameActive = true;
-        this.playerDataConfirmed = false; // Reset, waiting for server confirmation
+        
+        // Instead of directly joining, start the anime.js intro animation
+        this.startAnimeIntroAnimation();
+
         this.menuElement.style.display = "none";
         this.statusElement.textContent = "";
 
-        // Notify the server that the player is joining with a name
-        this.network.send({ type: "joinGame", name: this.playerName });
-
-        // Movement should be off initially, requiring a click on canvas to enable.
+        // Movement should be off initially.
         if (this.input) {
           this.input.disableMovement();
         }
-        this.isMovementEnabled = false; // Explicitly set game's movement state
+        this.isMovementEnabled = false; 
       } else {
         this.statusElement.textContent =
           "Please enter a name (1-16 characters).";
@@ -185,11 +184,11 @@ class Game {
     );
 
     this.network.on("chat", (data) => {
-      this.addChatMessage(data.sender || "Unknown", data.message);
+      this.addChatMessage(data.sender || "Unknown", data.message, data.color);
     });
   }
 
-  addChatMessage(sender, message) {
+  addChatMessage(sender, message, color) {
     const chatWindow = document.getElementById("messages");
     if (!chatWindow) return;
 
@@ -197,6 +196,44 @@ class Game {
     // messageElement.className = 'chat-message'; // Class name if needed by CSS, but new CSS targets p
     const displayName = sender === this.playerId ? this.playerName : sender; // Use local name for own messages if sender is just ID
     messageElement.textContent = `${displayName}: ${message}`;
+    
+    // Default text color if none specified
+    const textColor = color || "#FFFFFF";
+    messageElement.style.color = textColor;
+    
+    // Create a darker outline/shadow based on the text color
+    // Parse the color to RGB if it's a hex color
+    let shadowColor = "#000000"; // Default shadow
+    
+    if (textColor.startsWith("#")) {
+      // For hex colors, we can darken them programmatically
+      try {
+        let r = parseInt(textColor.slice(1, 3), 16);
+        let g = parseInt(textColor.slice(3, 5), 16);
+        let b = parseInt(textColor.slice(5, 7), 16);
+        
+        // Make each component darker by multiplying by 0.4
+        r = Math.floor(r * 0.4);
+        g = Math.floor(g * 0.4);
+        b = Math.floor(b * 0.4);
+        
+        shadowColor = `rgb(${r}, ${g}, ${b})`;
+      } catch (e) {
+        // If any parsing error, use default black shadow
+        shadowColor = "#000000";
+      }
+    }
+    
+    // Apply text shadow for outline effect
+    messageElement.style.textShadow = `1px 1px 1px ${shadowColor}, -1px -1px 1px ${shadowColor}, 1px -1px 1px ${shadowColor}, -1px 1px 1px ${shadowColor}`;
+    
+    // Ensure Baloo Paaji 2 font is applied
+    messageElement.style.fontFamily = "'Baloo Paaji 2', sans-serif";
+    
+    // If this is a server message, make it bold
+    if (sender === "SERVER") {
+      messageElement.style.fontWeight = "bold";
+    }
 
     chatWindow.appendChild(messageElement);
     // For flex-direction: column-reverse, new items at bottom, scroll to see latest (bottom)
@@ -841,6 +878,274 @@ class Game {
 
       this.bullets.set(bulletData.id, bullet);
     }
+  }
+
+  startAnimeIntroAnimation() {
+    const introOverlay = document.getElementById('intro-overlay');
+    const orbitContainer = document.getElementById('intro-orbit-container');
+    const playerElement = document.getElementById('intro-player');
+    const textElement = document.getElementById('intro-text');
+    const particlesContainer = document.getElementById('particles-js');
+
+    if (!introOverlay || !orbitContainer || !playerElement || !textElement || !particlesContainer) {
+      console.error("Intro animation elements not found for orbit animation!");
+      this.isGameActive = true;
+      this.playerDataConfirmed = false;
+      this.network.send({ type: "joinGame", name: this.playerName });
+      return;
+    }
+
+    introOverlay.style.display = 'block'; // Show the overlay (using block to let absolute positioning work inside)
+    introOverlay.style.pointerEvents = 'auto'; 
+
+    // Initialize particles.js with our config
+    try {
+      particlesJS('particles-js', {
+        "particles": {
+          "number": {
+            "value": 80,
+            "density": {
+              "enable": true,
+              "value_area": 800
+            }
+          },
+          "color": {
+            "value": "#ffffff"
+          },
+          "shape": {
+            "type": "circle",
+            "stroke": {
+              "width": 0,
+              "color": "#000000"
+            },
+            "polygon": {
+              "nb_sides": 3
+            }
+          },
+          "opacity": {
+            "value": 1,
+            "random": true,
+            "anim": {
+              "enable": false,
+              "speed": 1,
+              "opacity_min": 0.1,
+              "sync": false
+            }
+          },
+          "size": {
+            "value": 3,
+            "random": true,
+            "anim": {
+              "enable": false,
+              "speed": 40,
+              "size_min": 0.1,
+              "sync": false
+            }
+          },
+          "line_linked": {
+            "enable": true,
+            "distance": 150,
+            "color": "#ffffff",
+            "opacity": 0.4,
+            "width": 1
+          },
+          "move": {
+            "enable": true,
+            "speed": 6,
+            "direction": "none",
+            "random": true,
+            "straight": false,
+            "out_mode": "out",
+            "bounce": false,
+            "attract": {
+              "enable": true,
+              "rotateX": 1600,
+              "rotateY": 1200
+            }
+          }
+        },
+        "interactivity": {
+          "detect_on": "canvas",
+          "events": {
+            "onhover": {
+              "enable": false
+            },
+            "onclick": {
+              "enable": false
+            },
+            "resize": true
+          }
+        },
+        "retina_detect": false
+      });
+    } catch (e) {
+      console.error("Failed to initialize particles.js:", e);
+    }
+
+    // --- Player Setup ---
+    textElement.textContent = this.playerName;
+
+    // --- Enemy Setup ---
+    orbitContainer.innerHTML = ''; // Clear previous enemies
+    const enemyTypesForAnim = [
+        { id: 1, color: '#808080', size: 20, speed: 1.0 },     // Basic
+        { id: 2, color: '#8B0000', size: 22, speed: 0.95 },    // Sniper
+        { id: 3, color: '#003c66', size: 25, speed: 1.05 },    // Dasher
+        { id: 4, color: '#7F00FF', size: 18, speed: 0.97 },    // Homing
+        { id: 5, color: '#1c0a2d', size: 28, speed: 0.93 },    // VoidCrawler
+        { id: 2, color: '#a05353', size: 16, speed: 1.03 },    // Extra enemy type 
+        { id: 3, color: '#003c66', size: 25, speed: 0.98 },    // Extra enemy type
+        { id: 4, color: '#7F00FF', size: 18, speed: 1.02 },    // Extra enemy type
+        { id: 1, color: '#808080', size: 20, speed: 0.94 },    // Extra enemy type
+        { id: 5, color: '#1c0a2d', size: 24, speed: 1.01 },    // Extra enemy type
+        { id: 4, color: '#7F00FF', size: 18, speed: 0.99 },    // Extra enemy type
+        { id: 2, color: '#8B0000', size: 22, speed: 1.04 }     // Extra enemy type
+        // Add more types if desired, adjusting orbitRadius and speed
+    ];
+
+    // Use a single orbit radius for all enemies - perfect circle
+    const PERFECT_ORBIT_RADIUS = Math.min(window.innerWidth, window.innerHeight) / 2.8; // Responsive orbit size
+    
+    // Use actual enemy types if available from server init data
+    const availableEnemyTypes = this.enemyTypes || {};
+    enemyTypesForAnim.forEach(animType => {
+        const serverType = availableEnemyTypes[animType.id];
+        if (serverType && serverType.color) {
+            animType.color = serverType.color;
+        }
+        // Add the same orbit radius to all enemies
+        animType.orbitRadius = PERFECT_ORBIT_RADIUS;
+    });
+    
+    enemyTypesForAnim.forEach((enemyType, index) => {
+        const enemyDiv = document.createElement('div');
+        enemyDiv.classList.add('intro-enemy');
+        enemyDiv.style.width = `${enemyType.size}px`;
+        enemyDiv.style.height = `${enemyType.size}px`;
+        enemyDiv.style.backgroundColor = enemyType.color;
+        // Position relative to center with margins to account for element size
+        enemyDiv.style.marginLeft = `${-enemyType.size / 2}px`; 
+        enemyDiv.style.marginTop = `${-enemyType.size / 2}px`;
+        // Initial transform - will be at center (because of CSS left/top: 50%)
+        enemyDiv.style.transform = 'translate(0, 0) scale(0)';
+
+        // Store orbit data directly on the element for anime.js
+        enemyDiv.dataset.orbitRadius = enemyType.orbitRadius;
+        enemyDiv.dataset.speed = enemyType.speed;
+        enemyDiv.dataset.initialAngle = (index / enemyTypesForAnim.length) * 360; // Evenly spaced around the circle
+
+        orbitContainer.appendChild(enemyDiv);
+    });
+
+    // --- Animation Timeline ---
+    const orbitDuration = 6000; // Longer duration to showcase the orbit
+
+    const timeline = anime.timeline({
+      autoplay: true,
+      easing: 'easeInOutSine', // Smoother easing
+      complete: () => {
+        introOverlay.style.display = 'none';
+        introOverlay.style.pointerEvents = 'none';
+        this.isGameActive = true;
+        this.playerDataConfirmed = false;
+        console.log("Intro animation finished. Joining game...");
+        this.network.send({ type: "joinGame", name: this.playerName });
+        if (this.input) this.input.disableMovement();
+        this.isMovementEnabled = false;
+      }
+    });
+
+    timeline
+      // First, fade in the particles (stars)
+      .add({
+        targets: particlesContainer,
+        opacity: [0, 1],
+        duration: 800,
+        easing: 'linear'
+      })
+      // Then, fade in the dark background (overlay)
+      .add({
+        targets: introOverlay,
+        backgroundColor: ['rgba(0,0,0,0)', 'rgba(0,0,0,0.9)'], // From transparent to dark
+        duration: 500,
+        easing: 'linear'
+      }, '-=400') // Overlap with particles fade-in
+      // Player appears
+      .add({
+        targets: playerElement,
+        opacity: [0, 1],
+        transform: ['translate(0, 0) scale(0.5)', 'translate(0, 0) scale(1)'],
+        duration: 1000,
+      }, '-=300') // Overlap slightly with fade in
+      // Name appears above player
+      .add({
+          targets: textElement,
+          opacity: [0, 1],
+          duration: 800,
+          easing: 'easeOutExpo'
+      }, '-=700') // Overlap with player appearance
+      
+      // Enemies fly out to their orbits
+      .add({
+          targets: '.intro-enemy',
+          transform: (el) => {
+              const radius = parseFloat(el.dataset.orbitRadius);
+              const angle = parseFloat(el.dataset.initialAngle) * (Math.PI / 180);
+              const x = Math.cos(angle) * radius;
+              const y = Math.sin(angle) * radius;
+              return `translate(${x}px, ${y}px) scale(1)`;
+          },
+          opacity: [0, 1],
+          delay: anime.stagger(100, { start: 500 }),
+          duration: 1500,
+          easing: 'easeOutExpo'
+      }, 300) // Start after overlay fade and player starts appearing
+
+      // Orbiting animation - using a dummy target and update callback
+      .add({
+          targets: { angle: 0 }, // Dummy object to animate angle property
+          angle: (el) => 360 * 2, // Rotate twice
+          duration: orbitDuration,
+          easing: 'linear', // Constant speed orbit
+          update: function(anim) {
+              document.querySelectorAll('.intro-enemy').forEach(el => {
+                  const radius = parseFloat(el.dataset.orbitRadius);
+                  const speedFactor = parseFloat(el.dataset.speed);
+                  const initialAngle = parseFloat(el.dataset.initialAngle);
+                  const currentAngleRad = (initialAngle + (anim.progress / 100 * 360 * 2 * speedFactor)) * (Math.PI / 180); // Use animated angle % + speed factor
+                  
+                  const x = Math.cos(currentAngleRad) * radius;
+                  const y = Math.sin(currentAngleRad) * radius;
+                  
+                  el.style.transform = `translate(${x}px, ${y}px) scale(1)`;
+              });
+          }
+      }, '-=1000') // Start orbiting while they are still flying out
+
+      // Fade out everything before completion
+      .add({
+          targets: ['#intro-player', '#intro-text'],
+          opacity: 0,
+          transform: ['translate(0, 0) scale(1)', 'translate(0, 0) scale(0.8)'],
+          duration: 800,
+          easing: 'easeInExpo'
+      }, `-=${orbitDuration * 0.3}`) // Start fade out during the last 30% of orbit
+
+      // Separate fade-out for enemies with transform
+      .add({
+          targets: '.intro-enemy',
+          opacity: 0,
+          // Don't touch transform as it's being controlled by the orbit animation
+          duration: 800,
+          easing: 'easeInExpo'
+      }, `-=${orbitDuration * 0.3}`) // Same timing as other elements
+
+      .add({
+        targets: introOverlay,
+        opacity: [1, 0],
+        duration: 500,
+        easing: 'linear'
+      }, '-=500'); // Fade out overlay at the very end
   }
 }
 
