@@ -6,13 +6,13 @@
     "spawnTileType": 1,
     "types": {
       "basic": {
-        "count": 40,
+        "count": 25,
         "radius": 15,
         "minSpeed": 5,
         "maxSpeed": 8
       },
       "sniper": {
-        "count": 10,
+        "count": 5,
         "radius": 15,
         "minSpeed": 3,
         "maxSpeed": 5,
@@ -32,7 +32,7 @@
         "timeBetweenDashes": 750
       },
       "homing": {
-        "count": 10,
+        "count": 5,
         "radius": 15,
         "minSpeed": 4,
         "maxSpeed": 6,
@@ -49,7 +49,7 @@
       },
       "wall": {
         "count": 50,
-        "radius": 25,
+        "radius": 30,
         "minSpeed": 1,
         "maxSpeed": 1,
         "moveClockwise": true,
