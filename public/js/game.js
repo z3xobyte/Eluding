@@ -33,6 +33,14 @@ class Game {
     this.playerDataConfirmed = false; // Flag to check if own player data has been received after join
     this.spectatorCameraX = null;
     this.spectatorCameraY = null;
+    
+    // Spectate mode properties
+    this.isSpectateMode = false;
+    this.spectatedPlayerId = null;
+    this.previousCameraX = 0;
+    this.previousCameraY = 0;
+    this.spectateOverlay = null;
+    this.spectatePlayerList = []; // Store list of players for cycling
 
     // UI Elements for name input
     this.menuElement = document.getElementById("menu");
@@ -701,10 +709,147 @@ class Game {
           if (this.input) {
             this.input.disableMovement(); // Tell Input class to disable its state
           }
+          
+          // Disable spectate mode if it was active
+          if (this.isSpectateMode) {
+            this.isSpectateMode = false;
+            this.spectatedPlayerId = null;
+            this.hideSpectateOverlay();
+          }
         }
       } else {
       }
     });
+
+    this.input.on("spectateToggled", (isEnabled) => {
+      if (this.isGameActive && this.playerId) {
+        this.isSpectateMode = isEnabled;
+        
+        if (isEnabled) {
+          const player = this.players.get(this.playerId);
+          if (player) {
+            // Store current player position
+            this.previousCameraX = player.x;
+            this.previousCameraY = player.y;
+            
+            // Select a random player to spectate
+            this.selectRandomPlayerToSpectate();
+            
+            // Show spectate overlay
+            this.showSpectateOverlay();
+          }
+        } else {
+          // Return to own view
+          this.spectatedPlayerId = null;
+          
+          const player = this.players.get(this.playerId);
+          if (player && this.camera) {
+            this.camera.update(player.x, player.y, 0);
+          }
+          
+          // Hide spectate overlay
+          this.hideSpectateOverlay();
+        }
+      }
+    });
+
+    // Handle arrow keys for cycling through spectated players
+    document.addEventListener("keydown", (e) => {
+      if (this.isSpectateMode && this.isGameActive) {
+        // Left arrow key - previous player
+        if (e.keyCode === 37) {
+          this.cycleSpectatedPlayer(-1);
+        }
+        // Right arrow key - next player
+        else if (e.keyCode === 39) {
+          this.cycleSpectatedPlayer(1);
+        }
+      }
+    });
+  }
+
+  showSpectateOverlay() {
+    // Remove existing overlay if any
+    this.hideSpectateOverlay();
+    
+    // Create the spectate mode overlay
+    this.spectateOverlay = document.createElement('div');
+    this.spectateOverlay.style.position = 'absolute';
+    this.spectateOverlay.style.top = '10px';
+    this.spectateOverlay.style.left = '50%';
+    this.spectateOverlay.style.transform = 'translateX(-50%)';
+    this.spectateOverlay.style.backgroundColor = 'rgba(0, 0, 0, 0.7)';
+    this.spectateOverlay.style.color = '#FFD700'; // Gold text
+    this.spectateOverlay.style.padding = '8px 16px';
+    this.spectateOverlay.style.borderRadius = '4px';
+    this.spectateOverlay.style.fontFamily = "'Baloo Paaji 2', sans-serif";
+    this.spectateOverlay.style.zIndex = '1000';
+    this.spectateOverlay.style.pointerEvents = 'none'; // Don't block mouse events
+    this.spectateOverlay.style.textAlign = 'center';
+    
+    const spectatedPlayer = this.players.get(this.spectatedPlayerId);
+    const playerName = spectatedPlayer ? spectatedPlayer.name : 'Unknown';
+    
+    this.spectateOverlay.innerHTML = `
+      <div style="font-weight: bold;">SPECTATING</div>
+      <div>${playerName}</div>
+      <div style="font-size: 12px; margin-top: 4px;">Press SHIFT to return to your view</div>
+      <div style="font-size: 12px;">Use ← → arrow keys to cycle between players</div>
+    `;
+    
+    document.body.appendChild(this.spectateOverlay);
+  }
+  
+  hideSpectateOverlay() {
+    if (this.spectateOverlay && this.spectateOverlay.parentNode) {
+      this.spectateOverlay.parentNode.removeChild(this.spectateOverlay);
+      this.spectateOverlay = null;
+    }
+  }
+  
+  updateSpectateOverlay() {
+    if (this.isSpectateMode && this.spectatedPlayerId && this.spectateOverlay) {
+      const spectatedPlayer = this.players.get(this.spectatedPlayerId);
+      if (spectatedPlayer) {
+        // Update player name in overlay
+        const nameElement = this.spectateOverlay.querySelector('div:nth-child(2)');
+        if (nameElement) {
+          nameElement.textContent = spectatedPlayer.name;
+        }
+      }
+    }
+  }
+  
+  selectRandomPlayerToSpectate() {
+    // Get all players except self
+    this.updateSpectatePlayerList();
+    
+    if (this.spectatePlayerList.length > 0) {
+      // Pick a random player
+      const randomIndex = Math.floor(Math.random() * this.spectatePlayerList.length);
+      this.spectatedPlayerId = this.spectatePlayerList[randomIndex];
+      
+      const spectatedPlayer = this.players.get(this.spectatedPlayerId);
+      if (spectatedPlayer) {
+        console.log(`Now spectating: ${spectatedPlayer.name}`);
+        
+        // Add a chat message to inform the user
+        this.addChatMessage("SYSTEM", `Now spectating: ${spectatedPlayer.name}`, "#FFD700");
+        
+        // Update camera to follow the spectated player
+        if (this.camera) {
+          this.camera.update(spectatedPlayer.x, spectatedPlayer.y, 0);
+        }
+        
+        // Update the spectate overlay with player name
+        if (this.spectateOverlay) {
+          this.updateSpectateOverlay();
+        }
+      }
+    } else {
+      this.addChatMessage("SYSTEM", "No other players to spectate", "#FFD700");
+      this.isSpectateMode = false;
+    }
   }
 
   update() {
@@ -760,10 +905,24 @@ class Game {
       return;
     }
 
-    // If game is active for this player:
-    const player = this.players.get(this.playerId);
-    if (player && this.camera) {
-      this.camera.update(player.x, player.y, this.deltaTime);
+    // Active game logic
+    if (this.isSpectateMode && this.spectatedPlayerId) {
+      // In spectate mode, follow the spectated player
+      const spectatedPlayer = this.players.get(this.spectatedPlayerId);
+      
+      // If spectated player is no longer available, find a new one
+      if (!spectatedPlayer || spectatedPlayer.isDead) {
+        this.selectRandomPlayerToSpectate();
+      } else if (this.camera) {
+        this.camera.update(spectatedPlayer.x, spectatedPlayer.y, this.deltaTime);
+        this.updateSpectateOverlay();
+      }
+    } else {
+      // Normal mode - follow own player
+      const player = this.players.get(this.playerId);
+      if (player && this.camera) {
+        this.camera.update(player.x, player.y, this.deltaTime);
+      }
     }
   }
 
@@ -840,6 +999,9 @@ class Game {
       window.game = null;
     }
 
+    // Remove spectate overlay if it exists
+    this.hideSpectateOverlay();
+
     console.log("Game disposed");
   }
 
@@ -904,6 +1066,51 @@ class Game {
 
       this.bullets.set(bulletData.id, bullet);
     }
+  }
+
+  cycleSpectatedPlayer(direction) {
+    if (!this.isSpectateMode || !this.spectatedPlayerId) return;
+    
+    // Generate fresh list of valid players
+    this.updateSpectatePlayerList();
+    
+    if (this.spectatePlayerList.length <= 1) {
+      // Not enough players to cycle through
+      return;
+    }
+    
+    // Find current player index
+    const currentIndex = this.spectatePlayerList.findIndex(
+      playerId => playerId === this.spectatedPlayerId
+    );
+    
+    if (currentIndex !== -1) {
+      // Calculate new index with wrap-around
+      let newIndex = (currentIndex + direction) % this.spectatePlayerList.length;
+      if (newIndex < 0) newIndex = this.spectatePlayerList.length - 1;
+      
+      // Set new player to spectate
+      this.spectatedPlayerId = this.spectatePlayerList[newIndex];
+      
+      // Update UI
+      const spectatedPlayer = this.players.get(this.spectatedPlayerId);
+      if (spectatedPlayer) {
+        console.log(`Now spectating: ${spectatedPlayer.name}`);
+        this.updateSpectateOverlay();
+        
+        // Update camera position
+        if (this.camera) {
+          this.camera.update(spectatedPlayer.x, spectatedPlayer.y, 0);
+        }
+      }
+    }
+  }
+  
+  updateSpectatePlayerList() {
+    // Get all valid players except self
+    this.spectatePlayerList = Array.from(this.players.entries())
+      .filter(([id, player]) => id !== this.playerId && !player.isDead)
+      .map(([id]) => id);
   }
 }
 

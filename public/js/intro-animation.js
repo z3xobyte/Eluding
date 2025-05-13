@@ -174,7 +174,7 @@ export class IntroAnimation {
     playerElement.style.transform = 'scale(0.5)'; // Starting scale
 
     // --- Animation Timeline ---
-    const animationDuration = 4000; // Shorter duration since we removed the orbit
+    const animationDuration = 3000;// Shorter duration since we removed the orbit
 
     const timeline = anime.timeline({
       autoplay: true,

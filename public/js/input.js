@@ -6,6 +6,7 @@ export class Input {
     this.mouseY = 0;
     this.updateInterval = null;
     this.isMovementEnabled = false;
+    this.isSpectateMode = false;
     this.lastEmittedX = 0;
     this.lastEmittedY = 0;
     
@@ -92,6 +93,14 @@ export class Input {
     if (e.keyCode === 13) {
       return;
     }
+    
+    // Handle Shift key for spectate mode
+    if (e.keyCode === 16 && !this.keys[16]) {
+      this.isSpectateMode = !this.isSpectateMode;
+      this.emit('spectateToggled', this.isSpectateMode);
+      console.log(`Spectate mode ${this.isSpectateMode ? 'enabled' : 'disabled'}`);
+    }
+    
     this.keys[e.keyCode] = true;
     this.handleKeyboardMovement();
   }
