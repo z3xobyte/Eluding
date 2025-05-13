@@ -7,10 +7,10 @@
     "spawnTileType": 1,
     "types": {
       "basic": {
-        "count": 80,
+        "count": 50,
         "radius": 10,
-        "minSpeed": 4,
-        "maxSpeed": 4
+        "minSpeed": 6,
+        "maxSpeed": 6
       },
       "sniper": {
         "count": 0,
@@ -157,7 +157,11 @@
     2,
     4,
     1,
-    54,
+    51,
+    4,
+    1,
+    1,
+    2,
     0,
     2,
     2,
@@ -733,7 +737,7 @@
       1,
       1,
       1,
-      1,
+      4,
       1,
       1,
       0

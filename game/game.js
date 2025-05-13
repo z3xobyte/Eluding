@@ -717,6 +717,16 @@ class Game {
 
       const enemiesToSerialise = this.mapEnemies.get(mapIdToBroadcast) || new Map();
       const bulletsToSerialise = this.mapBullets.get(mapIdToBroadcast) || new Map();
+      
+      // Filter enemies based on player's view
+      const visibleEnemies = activePlayer ? 
+        this._filterEntitiesByPlayerView(activePlayer, enemiesToSerialise, 1.3) : 
+        enemiesToSerialise;
+      
+      // Filter bullets based on player's view
+      const visibleBullets = activePlayer ? 
+        this._filterEntitiesByPlayerView(activePlayer, bulletsToSerialise, 1.3) : 
+        bulletsToSerialise;
 
       const gameState = {
         t: "u",
@@ -727,14 +737,14 @@ class Game {
           p_data.isDead ? 1 : 0,
           p_data.name,
         ]),
-        e: Array.from(enemiesToSerialise.values()).map((e_data) => [
+        e: Array.from(visibleEnemies.values()).map((e_data) => [
           this._cachedEnemyIds.get(e_data.id) || e_data.id,
           e_data.type,
           Math.round(e_data.x),
           Math.round(e_data.y),
           e_data.radius,
         ]),
-        b: Array.from(bulletsToSerialise.values())
+        b: Array.from(visibleBullets.values())
           .filter((b_data) => b_data.isActive)
           .map((b_data) => [
             this._cachedBulletIds.get(b_data.id) || b_data.id,
@@ -751,11 +761,11 @@ class Game {
           const shortId = this._cachedPlayerIds.get(p_data.id);
           if (shortId) gameState.idMap.p[shortId] = p_data.id;
         }
-        for (const e_data of enemiesToSerialise.values()) {
+        for (const e_data of visibleEnemies.values()) {
           const shortId = this._cachedEnemyIds.get(e_data.id);
           if (shortId) gameState.idMap.e[shortId] = e_data.id;
         }
-        for (const b_data of bulletsToSerialise.values()) {
+        for (const b_data of visibleBullets.values()) {
           if (!b_data.isActive) continue;
           const shortId = this._cachedBulletIds.get(b_data.id);
           if (shortId) gameState.idMap.b[shortId] = b_data.id;
@@ -884,6 +894,55 @@ class Game {
         this._cachedBulletIds.delete(id);
       }
     }
+  }
+
+  /**
+   * Filters entities (enemies or bullets) based on the player's view
+   * @param {Player} player - The player whose view determines visibility
+   * @param {Map} entities - Map of entities to filter
+   * @param {number} viewMultiplier - Multiplier to extend the view (e.g., 1.3 = 130% of view width/height)
+   * @returns {Map} - Map containing only entities visible within the extended player view
+   */
+  _filterEntitiesByPlayerView(player, entities, viewMultiplier = 1.3) {
+    if (!player || !entities || entities.size === 0) {
+      return new Map();
+    }
+    
+    // Get the current map to get dimensions
+    const map = this.mapManager.getMapById(player.currentMapId);
+    if (!map) {
+      return entities; // If map not found, return all entities
+    }
+    
+    // Get visible entities
+    const visibleEntities = new Map();
+    
+    // Get the client viewport dimensions from the map state
+    const clientViewportWidth = map.width * map.tileSize / 2;  // Approximate viewport width
+    const clientViewportHeight = map.height * map.tileSize / 2; // Approximate viewport height
+    
+    // Calculate extended viewport bounds with multiplier
+    const extendedViewWidth = clientViewportWidth * viewMultiplier;
+    const extendedViewHeight = clientViewportHeight * viewMultiplier;
+    
+    // Calculate the boundaries of the player's extended view
+    const viewMinX = player.x - extendedViewWidth / 2;
+    const viewMaxX = player.x + extendedViewWidth / 2;
+    const viewMinY = player.y - extendedViewHeight / 2;
+    const viewMaxY = player.y + extendedViewHeight / 2;
+    
+    // Filter entities to include only those within the extended view
+    for (const [id, entity] of entities) {
+      // Check if the entity is within the extended view
+      if (entity.x + entity.radius >= viewMinX &&
+          entity.x - entity.radius <= viewMaxX &&
+          entity.y + entity.radius >= viewMinY &&
+          entity.y - entity.radius <= viewMaxY) {
+        visibleEntities.set(id, entity);
+      }
+    }
+    
+    return visibleEntities;
   }
 }
 

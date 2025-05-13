@@ -36,8 +36,8 @@
 
 #intro-player {
   position: absolute; /* Centered by parent flex */
-  width: 90px; /* 1.5x bigger player size */
-  height: 90px;
+  width: 135px; /* 1.5x bigger than original size (was 90px) */
+  height: 135px;
   background-color: #ddd; /* Default player color (can be changed by JS later if needed) */
   border-radius: 50%;
   border: 2px solid #bdbdbd; /* Outline similar to game */
@@ -47,8 +47,8 @@
   z-index: 100; /* Player above enemies */
   left: 50%;
   top: 50%;
-  margin-left: -45px; /* Half of the new width */
-  margin-top: -45px; /* Half of the new height */
+  margin-left: -67.5px; /* Half of the new width */
+  margin-top: -67.5px; /* Half of the new height */
 }
 
 .intro-enemy {
@@ -70,7 +70,7 @@
   position: absolute;
   /* Centered by parent flex, adjusted relative to player */
   color: #ffffff;
-  font-size: 18px; /* Slightly smaller */
+  font-size: 20px; /* Slightly larger */
   font-family: 'Baloo Paaji 2', sans-serif;
   white-space: nowrap;
   opacity: 0; /* Initially hidden */
@@ -79,5 +79,5 @@
   left: 50%;
   top: 50%;
   transform: translate(-50%, -100%); /* Center horizontally, position above vertically */
-  margin-top: -25px; /* Closer to player (but not touching) */
+  margin-top: -10px; /* Much closer to player (was -25px) */
 } 
