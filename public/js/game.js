@@ -163,9 +163,22 @@ class Game {
         ) {
           e.preventDefault();
           e.stopPropagation();
-          console.log("Enter pressed - focusing chat input");
+          console.log("No active input: showing chat input");
+          chatInput.focus();
+        } else if (e.key === "Enter" && chatInput.matches(":focus")) {
+          const message = chatInput.value.trim();
+          console.log("Chat input is focused, processing:", message);
 
-          setTimeout(() => chatInput.focus(), 0);
+          if (message) {
+            // Let the server handle all commands including /spectate
+            this.network.sendChatMessage(message);
+            chatInput.value = "";
+            chatInput.blur();
+          } else {
+            chatInput.blur();
+          }
+          e.stopPropagation();
+          e.preventDefault();
         }
       },
       true,
@@ -185,32 +198,6 @@ class Game {
       console.log("Chat input blurred");
     });
 
-    chatInput.addEventListener(
-      "keydown",
-      (e) => {
-        if (e.key === "Enter") {
-          const message = chatInput.value.trim();
-          if (message) {
-            // Check for spectate command
-            if (message.toLowerCase() === '/spectate' || message.toLowerCase() === '/s') {
-              this.enableSpectateMode();
-              chatInput.value = "";
-              chatInput.blur();
-            } else {
-              this.network.sendChatMessage(message);
-              chatInput.value = "";
-              chatInput.blur();
-            }
-          } else {
-            chatInput.blur();
-          }
-          e.stopPropagation();
-          e.preventDefault();
-        }
-      },
-      true,
-    );
-
     this.network.on("chat", (data) => {
       this.addChatMessage(data.sender || "Unknown", data.message, data.color);
     });
@@ -222,7 +209,12 @@ class Game {
 
     const messageElement = document.createElement("p"); // Use 'p' as per new CSS
     // messageElement.className = 'chat-message'; // Class name if needed by CSS, but new CSS targets p
-    const displayName = sender === this.playerId ? this.playerName : sender; // Use local name for own messages if sender is just ID
+    
+    // Format SERVER messages with brackets
+    const displayName = sender === this.playerId 
+      ? this.playerName 
+      : (sender === "SERVER" ? "[SERVER]" : sender); // Add brackets to SERVER messages
+    
     messageElement.textContent = `${displayName}: ${message}`;
     
     // Default text color if none specified
@@ -416,6 +408,12 @@ class Game {
       this.enemies.clear();
       this.bullets.clear();
       this.playerDataConfirmed = false; // Reset on any map change
+
+      // If we were spectating, we need to disable it since players changed maps
+      if (this.isSpectateMode) {
+        this.disableSpectateMode();
+        this.addChatMessage("SERVER", "Spectate mode ended: player changed maps", "#FF0000");
+      }
 
       if (data.playerData && data.playerData.id === this.playerId) {
         const pData = {
@@ -746,6 +744,13 @@ class Game {
         this.disableSpectateMode();
       }
     });
+
+    // Add listener for enableSpectate command from server
+    this.network.on("enableSpectate", () => {
+      if (this.isGameActive && this.playerId) {
+        this.enableSpectateMode();
+      }
+    });
   }
 
   showSpectateOverlay() {
@@ -814,7 +819,7 @@ class Game {
         console.log(`Now spectating: ${spectatedPlayer.name}`);
         
         // Add a chat message to inform the user
-        this.addChatMessage("SYSTEM", `Now spectating: ${spectatedPlayer.name}`, "#FFD700");
+        this.addChatMessage("SERVER", `Now spectating: ${spectatedPlayer.name}`, "#ffceb7");
         
         // Update camera to follow the spectated player
         if (this.camera) {
@@ -827,8 +832,8 @@ class Game {
         }
       }
     } else {
-      this.addChatMessage("SYSTEM", "No other players to spectate", "#FFD700");
-      this.isSpectateMode = false;
+      this.addChatMessage("SERVER", "No players to spectate", "#ffceb7");
+      this.disableSpectateMode();
     }
   }
 
@@ -847,7 +852,7 @@ class Game {
     }
 
     if (!this.isGameActive) {
-      // Spectator mode camera logic
+      // Spectator mode camera logic (for non-players)
       if (
         this.spectatorCameraX !== null &&
         this.spectatorCameraY !== null &&
@@ -890,9 +895,17 @@ class Game {
       // In spectate mode, follow the spectated player
       const spectatedPlayer = this.players.get(this.spectatedPlayerId);
       
-      // If spectated player is no longer available, find a new one
+      // If spectated player is no longer available, find a new one or disable spectate mode
       if (!spectatedPlayer || spectatedPlayer.isDead) {
-        this.selectRandomPlayerToSpectate();
+        // Check if there are still players that can be spectated
+        this.updateSpectatePlayerList();
+        if (this.spectatePlayerList.length > 0) {
+          this.selectRandomPlayerToSpectate();
+          this.addChatMessage("SERVER", "Previous player no longer available, switching to another player", "#ffceb7");
+        } else {
+          this.disableSpectateMode();
+          this.addChatMessage("SERVER", "No more players to spectate", "#ffceb7");
+        }
       } else if (this.camera) {
         this.camera.update(spectatedPlayer.x, spectatedPlayer.y, this.deltaTime);
         this.updateSpectateOverlay();
@@ -1076,6 +1089,7 @@ class Game {
       const spectatedPlayer = this.players.get(this.spectatedPlayerId);
       if (spectatedPlayer) {
         console.log(`Now spectating: ${spectatedPlayer.name}`);
+        this.addChatMessage("SERVER", `Now spectating: ${spectatedPlayer.name}`, "#ffceb7");
         this.updateSpectateOverlay();
         
         // Update camera position
@@ -1098,6 +1112,13 @@ class Game {
     
     const player = this.players.get(this.playerId);
     if (!player) return;
+    
+    // Check if there are other players to spectate
+    this.updateSpectatePlayerList();
+    if (this.spectatePlayerList.length === 0) {
+      this.addChatMessage("SERVER", "No players to spectate", "#ffceb7");
+      return;
+    }
     
     // Store current player position
     this.previousCameraX = player.x;

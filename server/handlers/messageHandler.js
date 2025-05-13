@@ -59,6 +59,8 @@ function handleChatMessage(game, ws, player, message, broadcast) {
   }
   if (message && (message.trim() === "/reset" || message.trim() === "/r")) {
     handleResetCommand(game, ws, player);
+  } else if (message && message.trim() === "/spectate") {
+    handleSpectateCommand(game, ws, player);
   } else if (message) {
     const chatMessageObject = {
       type: "chat",
@@ -284,6 +286,41 @@ async function handlePlayerMessage(game, ws, player, rawMessage, broadcast) {
   } catch (e) {
     console.error("Failed to parse or handle message:", e);
   }
+}
+
+// New function to handle spectate command
+function handleSpectateCommand(game, ws, player) {
+  // Check if there are other players to spectate in the same map
+  const playersInSameMap = Array.from(game.players.values()).filter(
+    p => p.id !== player.id && p.currentMapId === player.currentMapId && !p.isDead
+  );
+  
+  if (playersInSameMap.length === 0) {
+    // No players to spectate
+    const noPlayersMessage = JSON.stringify({
+      type: "chat",
+      sender: "[SERVER]",
+      message: "No players to spectate in this area.",
+      color: "#ffceb7"
+    });
+    ws.send(noPlayersMessage);
+    return;
+  }
+  
+  // Send a message to enable spectate mode
+  const spectateMessage = JSON.stringify({
+    type: "chat",
+    sender: "[SERVER]",
+    message: "Spectate mode enabled. Press ESC to exit.",
+    color: "#ffceb7"
+  });
+  ws.send(spectateMessage);
+  
+  // Tell client to enable spectate mode (will be handled in game.js)
+  const enableSpectateCommand = JSON.stringify({
+    type: "enableSpectate"
+  });
+  ws.send(enableSpectateCommand);
 }
 
 module.exports = {
