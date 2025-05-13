@@ -192,7 +192,7 @@ class Game {
           const message = chatInput.value.trim();
           if (message) {
             // Check for spectate command
-            if (message.toLowerCase() === '/spectate') {
+            if (message.toLowerCase() === '/spectate' || message.toLowerCase() === '/s') {
               this.enableSpectateMode();
               chatInput.value = "";
               chatInput.blur();
