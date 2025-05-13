@@ -94,11 +94,10 @@ export class Input {
       return;
     }
     
-    // Handle Shift key for spectate mode
-    if (e.keyCode === 16 && !this.keys[16]) {
-      this.isSpectateMode = !this.isSpectateMode;
-      this.emit('spectateToggled', this.isSpectateMode);
-      console.log(`Spectate mode ${this.isSpectateMode ? 'enabled' : 'disabled'}`);
+    // Handle Escape key press
+    if (e.keyCode === 27) {
+      this.emit('escapePressed');
+      console.log('Escape key pressed');
     }
     
     this.keys[e.keyCode] = true;

@@ -191,9 +191,16 @@ class Game {
         if (e.key === "Enter") {
           const message = chatInput.value.trim();
           if (message) {
-            this.network.sendChatMessage(message);
-            chatInput.value = "";
-            chatInput.blur();
+            // Check for spectate command
+            if (message.toLowerCase() === '/spectate') {
+              this.enableSpectateMode();
+              chatInput.value = "";
+              chatInput.blur();
+            } else {
+              this.network.sendChatMessage(message);
+              chatInput.value = "";
+              chatInput.blur();
+            }
           } else {
             chatInput.blur();
           }
@@ -712,44 +719,10 @@ class Game {
           
           // Disable spectate mode if it was active
           if (this.isSpectateMode) {
-            this.isSpectateMode = false;
-            this.spectatedPlayerId = null;
-            this.hideSpectateOverlay();
+            this.disableSpectateMode();
           }
         }
       } else {
-      }
-    });
-
-    this.input.on("spectateToggled", (isEnabled) => {
-      if (this.isGameActive && this.playerId) {
-        this.isSpectateMode = isEnabled;
-        
-        if (isEnabled) {
-          const player = this.players.get(this.playerId);
-          if (player) {
-            // Store current player position
-            this.previousCameraX = player.x;
-            this.previousCameraY = player.y;
-            
-            // Select a random player to spectate
-            this.selectRandomPlayerToSpectate();
-            
-            // Show spectate overlay
-            this.showSpectateOverlay();
-          }
-        } else {
-          // Return to own view
-          this.spectatedPlayerId = null;
-          
-          const player = this.players.get(this.playerId);
-          if (player && this.camera) {
-            this.camera.update(player.x, player.y, 0);
-          }
-          
-          // Hide spectate overlay
-          this.hideSpectateOverlay();
-        }
       }
     });
 
@@ -764,6 +737,13 @@ class Game {
         else if (e.keyCode === 39) {
           this.cycleSpectatedPlayer(1);
         }
+      }
+    });
+
+    // Handle escape key for exiting spectate mode
+    this.input.on("escapePressed", () => {
+      if (this.isSpectateMode) {
+        this.disableSpectateMode();
       }
     });
   }
@@ -793,7 +773,7 @@ class Game {
     this.spectateOverlay.innerHTML = `
       <div style="font-weight: bold;">SPECTATING</div>
       <div>${playerName}</div>
-      <div style="font-size: 12px; margin-top: 4px;">Press SHIFT to return to your view</div>
+      <div style="font-size: 12px; margin-top: 4px;">Press ESC to return to your view</div>
       <div style="font-size: 12px;">Use ← → arrow keys to cycle between players</div>
     `;
     
@@ -1111,6 +1091,43 @@ class Game {
     this.spectatePlayerList = Array.from(this.players.entries())
       .filter(([id, player]) => id !== this.playerId && !player.isDead)
       .map(([id]) => id);
+  }
+
+  enableSpectateMode() {
+    if (!this.isGameActive || !this.playerId) return;
+    
+    const player = this.players.get(this.playerId);
+    if (!player) return;
+    
+    // Store current player position
+    this.previousCameraX = player.x;
+    this.previousCameraY = player.y;
+    
+    // Enable spectate mode
+    this.isSpectateMode = true;
+    
+    // Select a random player to spectate
+    this.selectRandomPlayerToSpectate();
+    
+    // Show spectate overlay
+    this.showSpectateOverlay();
+  }
+  
+  disableSpectateMode() {
+    if (!this.isSpectateMode) return;
+    
+    // Disable spectate mode
+    this.isSpectateMode = false;
+    this.spectatedPlayerId = null;
+    
+    // Return to own view if possible
+    const player = this.players.get(this.playerId);
+    if (player && this.camera) {
+      this.camera.update(player.x, player.y, 0);
+    }
+    
+    // Hide spectate overlay
+    this.hideSpectateOverlay();
   }
 }
 
