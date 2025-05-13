@@ -23,16 +23,38 @@ class Game {
 
     this.enemyTypes = {};
     this.playerId = null;
+    this.playerName = null;
     this.map = null;
     this.mapWidth = 0;
     this.mapHeight = 0;
     this.tileSize = 0;
-    this.isMovementEnabled = false; // Player starts inactive
-    this.playerName = "";
+    this.isMovementEnabled = false;
     this.isGameActive = false;
-    this.playerDataConfirmed = false; // Flag to check if own player data has been received after join
+    this.playerDataConfirmed = false;
+    this.gameLoopRequestId = null;
+    this.isGameOver = false;
     this.spectatorCameraX = null;
     this.spectatorCameraY = null;
+    this.maxChatMessages = 50;
+    this.lastUpdateTime = Date.now();
+    this.deltaTime = 0;
+    this.fpsCap = 60;
+    this.fps = 0;
+    this.frameCount = 0;
+    this.lastFpsUpdate = 0;
+    
+    // Client-side prediction properties
+    this.predictedPlayerPosition = {
+      x: 0,
+      y: 0,
+      lastServerX: 0,
+      lastServerY: 0,
+      timestampLastUpdate: 0,
+      pendingInputs: [],
+      sequenceNumber: 0
+    };
+    this.reconciliationThreshold = 5; // Threshold for position difference requiring reconciliation
+    this.reconciliationLerpFactor = 0.2; // How quickly to reconcile (0-1)
     
     // Spectate mode properties
     this.isSpectateMode = false;
@@ -42,42 +64,29 @@ class Game {
     this.spectateOverlay = null;
     this.spectatePlayerList = []; // Store list of players for cycling
 
-    // UI Elements for name input
-    this.menuElement = document.getElementById("menu");
-    this.nameInputElement = document.getElementById("name");
-    this.playButtonElement = document.getElementById("play");
-    this.statusElement = document.getElementById("status");
-
     this.camera = new Camera(this.canvas.width, this.canvas.height);
-    console.log("Camera initialized:", this.camera);
-
     this.renderer = new Renderer(this.ctx);
-    console.log("Renderer initialized:", this.renderer);
-
-    this.input = new Input(this.canvas);
-    console.log("Input initialized:", this.input);
-
     this.network = new Network();
-    console.log("Network initialized:", this.network);
+    this.input = new Input(this.canvas);
 
-    this.lastUpdateTime = Date.now();
-    this.deltaTime = 0;
-
-    this.fpsDisplay = document.getElementById("fpsDisplay");
-    this.frameCount = 0;
-    this.lastFpsUpdate = Date.now();
-    this.fps = 0;
-
-    this.maxChatMessages = 100;
-
-    this.setupEventListeners();
-    this.setupNameInput(); // Setup name input before chat, as chat might depend on name
-    this.setupChat();
-    this.startGameLoop();
-
-    if (this.input) {
-      this.input.disableMovement(); // Ensure input class also knows movement is initially off
+    this.fpsDisplay = document.getElementById("fps");
+    if (!this.fpsDisplay) {
+      this.fpsDisplay = document.createElement("div");
+      this.fpsDisplay.id = "fps";
+      this.fpsDisplay.style.position = "absolute";
+      this.fpsDisplay.style.top = "5px";
+      this.fpsDisplay.style.right = "5px";
+      this.fpsDisplay.style.color = "white";
+      this.fpsDisplay.style.fontSize = "12px";
+      document.body.appendChild(this.fpsDisplay);
     }
+
+    // Main game initialization
+    this.setupNameInput();
+    this.setupChat();
+    this.setupEventListeners();
+    this.network.connect();
+    this.startGameLoop();
   }
 
   setupNameInput() {
@@ -332,7 +341,6 @@ class Game {
       ) {
         // Game is active, but player's own data hasn't been confirmed yet after join attempt.
         // This state implies we are waiting for the server to send our specific player data.
-        // Avoid sending requestIdMap immediately here, wait for 'u' or 'update'.
         console.log(
           `Game active for ${this.playerId}, but own data not yet confirmed via init.`,
         );
@@ -455,8 +463,17 @@ class Game {
         const existingPlayer = this.players.get(playerData.id);
 
         if (existingPlayer) {
-          existingPlayer.x = playerData.x;
-          existingPlayer.y = playerData.y;
+          if (playerData.id === this.playerId) {
+            // Handle server update of own player position
+            this.handleServerPositionUpdate(playerData);
+          } else {
+            // Regular update for other players
+            existingPlayer.prevX = existingPlayer.x;
+            existingPlayer.prevY = existingPlayer.y;
+            existingPlayer.x = playerData.x;
+            existingPlayer.y = playerData.y;
+          }
+          
           if (playerData.color !== undefined)
             existingPlayer.color = playerData.color;
           if (playerData.isDead !== undefined)
@@ -468,6 +485,8 @@ class Game {
             id: playerData.id,
             x: playerData.x,
             y: playerData.y,
+            prevX: playerData.x,
+            prevY: playerData.y,
             radius: playerData.radius || 25,
             color: playerData.color || "#FFFFFF",
             isDead: playerData.isDead || false,
@@ -476,7 +495,6 @@ class Game {
               "Player " +
                 (playerData.id ? playerData.id.substring(0, 4) : "???"),
           });
-          // console.log(`Added player with ID: ${playerData.id}`); // Reduced logging
         }
       });
 
@@ -751,6 +769,41 @@ class Game {
         this.enableSpectateMode();
       }
     });
+
+    this.input.on("movement", (data) => {
+      if (!this.isGameActive || this.isSpectateMode) return;
+      
+      const player = this.players.get(this.playerId);
+      if (!player) return;
+      
+      // Store current input with sequence number
+      const input = {
+        sequenceNumber: this.predictedPlayerPosition.sequenceNumber++,
+        dirX: data.dirX,
+        dirY: data.dirY,
+        angle: data.angle,
+        distance: data.distance,
+        mouseActive: data.mouseActive,
+        timestamp: Date.now()
+      };
+      
+      // Apply input to predicted position
+      this.applyInput(input);
+      
+      // Store input for reconciliation
+      this.predictedPlayerPosition.pendingInputs.push(input);
+      
+      // Send input to server
+      this.network.send({
+        type: 'playerInput',
+        sequenceNumber: input.sequenceNumber,
+        dirX: input.dirX,
+        dirY: input.dirY,
+        angle: input.angle,
+        distance: input.distance,
+        mouseActive: input.mouseActive
+      });
+    });
   }
 
   showSpectateOverlay() {
@@ -861,7 +914,7 @@ class Game {
         this.camera.update(
           this.spectatorCameraX,
           this.spectatorCameraY,
-          this.deltaTime,
+          this.deltaTime
         );
       } else {
         // Fallback if spectator coords not set: center on first other player or map center
@@ -875,14 +928,14 @@ class Game {
           this.camera.update(
             firstOtherPlayer.x,
             firstOtherPlayer.y,
-            this.deltaTime,
+            this.deltaTime
           );
         } else if (this.mapWidth > 0 && this.mapHeight > 0 && this.camera) {
           // map loaded
           this.camera.update(
             (this.mapWidth * this.tileSize) / 2,
             (this.mapHeight * this.tileSize) / 2,
-            this.deltaTime,
+            this.deltaTime
           );
         }
       }
@@ -914,7 +967,7 @@ class Game {
       // Normal mode - follow own player
       const player = this.players.get(this.playerId);
       if (player && this.camera) {
-        this.camera.update(player.x, player.y, this.deltaTime);
+        this.camera.update(this.predictedPlayerPosition.x, this.predictedPlayerPosition.y, this.deltaTime);
       }
     }
   }
@@ -931,6 +984,20 @@ class Game {
         this.tileSize,
         this.camera,
       );
+
+      // Interpolate player positions for rendering
+      this.players.forEach(player => {
+        // For own player, use predicted position
+        if (player.id === this.playerId && !this.isSpectateMode) {
+          player.renderX = this.predictedPlayerPosition.x;
+          player.renderY = this.predictedPlayerPosition.y;
+        } else {
+          // For other players, interpolate between previous and current position
+          const lerpAmount = Math.min(1, this.deltaTime / 100);
+          player.renderX = player.prevX + (player.x - player.prevX) * lerpAmount;
+          player.renderY = player.prevY + (player.y - player.prevY) * lerpAmount;
+        }
+      });
 
       // Always render players and enemies if they exist, regardless of this client's active state
       this.renderer.renderPlayers(this.players, this.camera); // Assumes Renderer handles names
@@ -1149,6 +1216,97 @@ class Game {
     
     // Hide spectate overlay
     this.hideSpectateOverlay();
+  }
+
+  applyInput(input) {
+    // Get player speed (could be adjusted based on game state)
+    const playerSpeed = 5; // Base player speed
+    const dt = 16 / 1000; // Assuming 60fps
+    
+    // Calculate movement based on input
+    let dx = 0, dy = 0;
+    
+    if (input.mouseActive) {
+      // Mouse movement
+      dx = input.distance * Math.cos(input.angle) * playerSpeed;
+      dy = input.distance * Math.sin(input.angle) * playerSpeed;
+    } else {
+      // Keyboard movement
+      dx = input.dirX * playerSpeed;
+      dy = input.dirY * playerSpeed;
+      
+      // Normalize diagonal movement
+      if (dx !== 0 && dy !== 0) {
+        const normalizer = 1 / Math.sqrt(2);
+        dx *= normalizer;
+        dy *= normalizer;
+      }
+    }
+    
+    // Apply movement to predicted position
+    this.predictedPlayerPosition.x += dx;
+    this.predictedPlayerPosition.y += dy;
+    
+    // Update player with predicted position
+    const player = this.players.get(this.playerId);
+    if (player) {
+      player.prevX = player.x;
+      player.prevY = player.y;
+      player.x = this.predictedPlayerPosition.x;
+      player.y = this.predictedPlayerPosition.y;
+    }
+    
+    return { dx, dy };
+  }
+  
+  handleServerPositionUpdate(playerData) {
+    const serverX = playerData.x;
+    const serverY = playerData.y;
+    const lastAcknowledgedSequence = playerData.lastProcessedInput || 0;
+    
+    // Store server position
+    this.predictedPlayerPosition.lastServerX = serverX;
+    this.predictedPlayerPosition.lastServerY = serverY;
+    this.predictedPlayerPosition.timestampLastUpdate = Date.now();
+    
+    // Remove inputs that have been processed by the server
+    this.predictedPlayerPosition.pendingInputs = 
+      this.predictedPlayerPosition.pendingInputs.filter(input => 
+        input.sequenceNumber > lastAcknowledgedSequence);
+    
+    // Calculate discrepancy between server and client positions
+    const dx = serverX - this.predictedPlayerPosition.x;
+    const dy = serverY - this.predictedPlayerPosition.y;
+    const discrepancySquared = dx * dx + dy * dy;
+    
+    if (discrepancySquared > this.reconciliationThreshold * this.reconciliationThreshold) {
+      // Reset position to server position
+      this.predictedPlayerPosition.x = serverX;
+      this.predictedPlayerPosition.y = serverY;
+      
+      // Reapply all pending inputs
+      this.predictedPlayerPosition.pendingInputs.forEach(input => {
+        this.applyInput(input);
+      });
+    } else if (discrepancySquared > 0) {
+      // Small discrepancy, smooth correction
+      this.predictedPlayerPosition.x += dx * this.reconciliationLerpFactor;
+      this.predictedPlayerPosition.y += dy * this.reconciliationLerpFactor;
+    }
+    
+    // Update player with corrected position
+    const player = this.players.get(this.playerId);
+    if (player) {
+      player.prevX = player.x;
+      player.prevY = player.y;
+      player.x = this.predictedPlayerPosition.x;
+      player.y = this.predictedPlayerPosition.y;
+      
+      // Update other properties
+      if (playerData.color !== undefined) player.color = playerData.color;
+      if (playerData.isDead !== undefined) player.isDead = playerData.isDead;
+      if (playerData.name !== undefined) player.name = playerData.name;
+    }
   }
 }
 

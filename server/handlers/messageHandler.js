@@ -282,6 +282,8 @@ async function handlePlayerMessage(game, ws, player, rawMessage, broadcast) {
       game._idMapNeedsUpdate = true;
     } else if (data.type === "chat") {
       handleChatMessage(game, ws, player, data.message, broadcast);
+    } else if (data.type === "playerInput") {
+      handlePlayerInput(game, ws, player, data);
     }
   } catch (e) {
     console.error("Failed to parse or handle message:", e);
@@ -321,6 +323,25 @@ function handleSpectateCommand(game, ws, player) {
     type: "enableSpectate"
   });
   ws.send(enableSpectateCommand);
+}
+
+// Add a new handler function for player inputs
+function handlePlayerInput(game, ws, player, data) {
+  if (!player || player.isDead) return;
+  
+  // Create input object from client data
+  const input = {
+    sequenceNumber: data.sequenceNumber || 0,
+    dirX: data.dirX || 0,
+    dirY: data.dirY || 0,
+    angle: data.angle || 0,
+    distance: data.distance || 0,
+    mouseActive: data.mouseActive || false,
+    timestamp: Date.now()
+  };
+  
+  // Pass the input to the player for processing
+  player.handleInput(input);
 }
 
 module.exports = {

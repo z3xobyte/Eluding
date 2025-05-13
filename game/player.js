@@ -1,22 +1,34 @@
 const { v4: uuidv4 } = require("uuid");
 const SAT = require("sat"); // Import SAT.js library
+const config = require("./config");
 
 class Player {
-  constructor(x, y, radius, color, name = null) {
-    this.id = uuidv4();
-    this.name = name || `Player ${this.id.substring(0, 4)}`;
+  constructor({ id, name, x, y, mapId }) {
+    this.id = id;
+    this.name = name || `Player ${id.substring(0, 4)}`;
     this.x = x;
     this.y = y;
-    this.radius = radius;
-    this.color = color;
-    this.originalColor = color;
+    this.radius = 25;
+    this.color = "#FFFFFF";
+    this.speed = 5;
+    this.isDead = false;
+    this.currentMapId = mapId;
+    this.respawnTimer = null;
+    this.score = 0;
+    this.kills = 0;
+    this.damageDone = 0;
+    this.lastProcessedInput = 0; // Track last processed client input
+    this.pendingInputs = []; // Store pending inputs for processing
+    this.inputBuffer = []; // Buffer for smoothing out network jitter
+    this.inputBufferSize = 3; // Number of inputs to buffer
+    this.lastUpdateTime = Date.now();
+    this.originalColor = this.color;
+    this.originalMaxSpeed = this.speed;
     this.vx = 0;
     this.vy = 0;
-    this.maxSpeed = 10;
-    this.originalMaxSpeed = this.maxSpeed;
+    this.maxSpeed = this.speed;
     this.targetX = x;
     this.targetY = y;
-    this.lastUpdateTime = Date.now();
     this.input = null;
     this.dirX = 0;
     this.dirY = 0;
@@ -31,13 +43,11 @@ class Player {
     this.COLLISION_CACHE_EVICTION_COUNT = 100;
     this.stuckCounter = 0;
     this.lastPosition = { x: x, y: y }; // Stores position at the START of an update tick
-    this.isDead = false;
-    this.currentMapId = null;
     this.needsToExitTeleporterArea = null;
     this.justTeleportedFlag = false;
     this.TELEPORT_GRACE_DURATION = 100;
     this.lastTeleportTimestamp = 0;
-    this.collider = new SAT.Circle(new SAT.Vector(x, y), radius);
+    this.collider = new SAT.Circle(new SAT.Vector(x, y), this.radius);
     this.response = new SAT.Response();
   }
 
@@ -99,231 +109,206 @@ class Player {
     return tiles;
   }
 
-  update(map, gameInstance) {
-    const grid = gameInstance.mapGrids.get(this.currentMapId);
-    if (!grid) return;
+  update(dt, grids) {
+    if (this.isDead) return;
 
+    // Process all pending inputs in the buffer
+    this.processInputs(dt, grids);
+  }
+
+  processInputs(dt, grids) {
+    // Skip if no inputs to process
+    if (this.inputBuffer.length === 0) return;
+    
+    // Get current time for movement calculations
     const currentTime = Date.now();
-    const actualDeltaTimeMs = currentTime - this.lastUpdateTime;
-    let deltaTimeFactor = actualDeltaTimeMs / 16.67;
-
-    // Clamp deltaTimeFactor to prevent excessive movement in a single frame
-    const MAX_DELTA_TIME_FACTOR = 3; // Allow up to 3x normal frame movement
-    if (deltaTimeFactor > MAX_DELTA_TIME_FACTOR) {
-      deltaTimeFactor = MAX_DELTA_TIME_FACTOR;
-    }
+    const deltaTimeSeconds = (currentTime - this.lastUpdateTime) / 1000;
     this.lastUpdateTime = currentTime;
-
-    if (this.isDead) {
-      this.vx = 0;
-      this.vy = 0;
-      return;
-    }
-
-    this.lastPosition.x = this.x;
-    this.lastPosition.y = this.y;
-
-    if (
-      this.justTeleportedFlag &&
-      currentTime - this.lastTeleportTimestamp > this.TELEPORT_GRACE_DURATION
-    ) {
-      this.justTeleportedFlag = false;
-    }
-
-    let collisionHappenedThisFrame = false;
-
-    if (this.justTeleportedFlag) {
-      this.vx = 0;
-      this.vy = 0;
-      this.collider.pos.x = this.x;
-      this.collider.pos.y = this.y;
-    } else {
-      if (this.input) {
-        this.vx = this.d_x * this.maxSpeed;
-        this.vy = this.d_y * this.maxSpeed;
+    
+    // Sort inputs by sequence number and process them in order
+    this.inputBuffer.sort((a, b) => a.sequenceNumber - b.sequenceNumber);
+    
+    // Process each input
+    while (this.inputBuffer.length > 0) {
+      const input = this.inputBuffer.shift();
+      
+      // Update last processed input
+      this.lastProcessedInput = Math.max(this.lastProcessedInput, input.sequenceNumber);
+      
+      // Skip invalid inputs
+      if (!input || this.isDead) continue;
+      
+      let dx = 0;
+      let dy = 0;
+      
+      // Calculate movement from input data
+      if (input.mouseActive) {
+        // Mouse-based movement
+        dx = input.distance * Math.cos(input.angle) * this.speed;
+        dy = input.distance * Math.sin(input.angle) * this.speed;
       } else {
-        const dxToTarget = this.targetX - this.x;
-        const dyToTarget = this.targetY - this.y;
-        const distanceToTargetSq =
-          dxToTarget * dxToTarget + dyToTarget * dyToTarget;
-
-        if (distanceToTargetSq > 1) {
-          const distanceToTarget = Math.sqrt(distanceToTargetSq);
-          const speedFactor = Math.min(distanceToTarget / 150, 1);
-
-          const dirXToTarget = dxToTarget / distanceToTarget;
-          const dirYToTarget = dyToTarget / distanceToTarget;
-          this.vx = dirXToTarget * this.maxSpeed * speedFactor;
-          this.vy = dirYToTarget * this.maxSpeed * speedFactor;
-        } else {
-          this.x = this.targetX;
-          this.y = this.targetY;
-          this.vx = 0;
-          this.vy = 0;
-        }
-      }
-
-      const intendedMoveDx = this.vx * deltaTimeFactor;
-      const intendedMoveDy = this.vy * deltaTimeFactor;
-
-      this.x += intendedMoveDx;
-      this.y += intendedMoveDy;
-
-      this.collider.pos.x = this.x;
-      this.collider.pos.y = this.y;
-
-      const broadphaseBoxX =
-        Math.min(this.lastPosition.x, this.x) - this.radius;
-      const broadphaseBoxY =
-        Math.min(this.lastPosition.y, this.y) - this.radius;
-      const broadphaseWidth =
-        Math.abs(this.x - this.lastPosition.x) + this.radius * 2;
-      const broadphaseHeight =
-        Math.abs(this.y - this.lastPosition.y) + this.radius * 2;
-
-      const potentialTiles = this.getTilesInBoundingBox(
-        broadphaseBoxX,
-        broadphaseBoxY,
-        broadphaseWidth,
-        broadphaseHeight,
-        map,
-      );
-
-      let collisionHappenedThisFrame = false;
-
-      for (const tile of potentialTiles) {
-        if (map.isWall(tile.tx, tile.ty)) {
-          const tilePolygon = new SAT.Box(
-            new SAT.Vector(tile.x, tile.y),
-            tile.width,
-            tile.height,
-          ).toPolygon();
-
-          this.response.clear();
-
-          const collided = SAT.testCirclePolygon(
-            this.collider,
-            tilePolygon,
-            this.response,
-          );
-
-          if (collided) {
-            collisionHappenedThisFrame = true;
-
-            const overlapV = this.response.overlapV;
-
-            this.x -= overlapV.x;
-            this.y -= overlapV.y;
-
-            this.collider.pos.x = this.x;
-            this.collider.pos.y = this.y;
-
-            if (Math.abs(overlapV.x) > 0.001) {
-              this.vx = 0;
-            }
-
-            if (Math.abs(overlapV.y) > 0.001) {
-              this.vy = 0;
-            }
-          }
-        }
-      }
-
-      if (this.input && collisionHappenedThisFrame) {
-        this.input.setSlippery(false);
-      }
-    }
-
-    if (this.needsToExitTeleporterArea) {
-      if (this.currentMapId !== this.needsToExitTeleporterArea.mapId) {
-        this.needsToExitTeleporterArea = null;
-      } else {
-        const exitAreaPolygon = new SAT.Box(
-          new SAT.Vector(
-            this.needsToExitTeleporterArea.x,
-            this.needsToExitTeleporterArea.y,
-          ),
-          this.needsToExitTeleporterArea.width,
-          this.needsToExitTeleporterArea.height,
-        ).toPolygon();
-
-        if (!SAT.testCirclePolygon(this.collider, exitAreaPolygon)) {
-          this.needsToExitTeleporterArea = null;
-        }
-      }
-    }
-
-    if (!this.needsToExitTeleporterArea && !this.justTeleportedFlag) {
-      // Get current tile based on player's center
-      const playerTileX = Math.floor(this.x / map.tileSize);
-      const playerTileY = Math.floor(this.y / map.tileSize);
-
-      // Check if the map indicates this tile is a teleporter
-      if (map.isTeleporter && map.isTeleporter(playerTileX, playerTileY)) {
-        const teleporter = map.getTeleporter(playerTileX, playerTileY);
-
-        // First, try to find a direct teleporter link (new format)
-        let useDirectLink = false;
+        // Keyboard-based movement
+        dx = input.dirX * this.speed;
+        dy = input.dirY * this.speed;
         
-        if (map.teleporterLinks && map.teleporterLinks.length > 0) {
-          // Extract current map index (map1 -> 0, map2 -> 1, etc.)
-          const currentMapId = this.currentMapId;
-          const currentMapIndex = parseInt(currentMapId.replace(/[^0-9]/g, '')) - 1;
-          
-          // Check if there's a direct link for this teleporter
-          for (const link of map.teleporterLinks) {
-            const [fromMapIndex, fromX, fromY] = link.fromKey.split(',').map(Number);
-            if (fromMapIndex === currentMapIndex && fromX === playerTileX && fromY === playerTileY) {
-              // Found a direct link - use it through gameInstance.handlePlayerTeleport
-              if (gameInstance && typeof gameInstance.handlePlayerTeleport === "function") {
-                this.justTeleportedFlag = true;
-                this.lastTeleportTimestamp = currentTime;
-                gameInstance.handlePlayerTeleport(this.id, { 
-                  tileX: playerTileX, 
-                  tileY: playerTileY,
-                  // No code or mapId needed for direct links - the game will find them
-                });
-                useDirectLink = true;
-                break;
-              }
-            }
-          }
+        // Normalize diagonal movement
+        if (dx !== 0 && dy !== 0) {
+          const normalizer = 1 / Math.sqrt(2);
+          dx *= normalizer;
+          dy *= normalizer;
+        }
+      }
+      
+      // Apply movement if valid
+      if (!isNaN(dx) && !isNaN(dy) && (dx !== 0 || dy !== 0)) {
+        const newX = this.x + dx;
+        const newY = this.y + dy;
+        
+        // Check for collisions
+        if (!this.checkCollision(newX, this.y, grids)) {
+          this.x = newX;
         }
         
-        // If no direct link was found or used, try the traditional teleporter system
-        if (!useDirectLink && teleporter && teleporter.code) {
-          // Create SAT polygon for the teleporter
-          const teleporterWorldX = teleporter.tileX * map.tileSize;
-          const teleporterWorldY = teleporter.tileY * map.tileSize;
-          const teleporterWidth = teleporter.width || map.tileSize;
-          const teleporterHeight = teleporter.height || map.tileSize;
-
-          const teleporterPolygon = new SAT.Box(
-            new SAT.Vector(teleporterWorldX, teleporterWorldY),
-            teleporterWidth,
-            teleporterHeight,
-          ).toPolygon();
-
-          this.response.clear();
-          if (
-            SAT.testCirclePolygon(
-              this.collider,
-              teleporterPolygon,
-              this.response,
-            )
-          ) {
-            // Collision detected with this teleporter
-            if (
-              gameInstance &&
-              typeof gameInstance.handlePlayerTeleport === "function"
-            ) {
-              this.justTeleportedFlag = true;
-              this.lastTeleportTimestamp = currentTime;
-              gameInstance.handlePlayerTeleport(this.id, teleporter);
-            }
-          }
+        if (!this.checkCollision(this.x, newY, grids)) {
+          this.y = newY;
         }
       }
+    }
+  }
+
+  // Handle client input message
+  handleInput(input) {
+    // Add new input to buffer, maintaining size limit
+    this.inputBuffer.push(input);
+    
+    // Trim buffer if it exceeds max size
+    if (this.inputBuffer.length > this.inputBufferSize) {
+      // Keep the most recent inputs
+      this.inputBuffer = this.inputBuffer.slice(-this.inputBufferSize);
+    }
+  }
+
+  checkCollision(newX, newY, grids) {
+    // Get relevant collision grid
+    const collisionGrid = grids?.collision;
+    if (!collisionGrid) return false;
+
+    // Get tile coordinates
+    const tileSize = collisionGrid.tileSize;
+    const tileX = Math.floor(newX / tileSize);
+    const tileY = Math.floor(newY / tileSize);
+
+    // Check player radius against tiles
+    const radius = this.radius;
+    
+    // Check surrounding tiles
+    for (let dy = -1; dy <= 1; dy++) {
+      for (let dx = -1; dx <= 1; dx++) {
+        const checkX = tileX + dx;
+        const checkY = tileY + dy;
+        
+        // Skip out-of-bounds tiles
+        if (checkX < 0 || checkY < 0 || 
+            checkX >= collisionGrid.width || 
+            checkY >= collisionGrid.height) {
+          continue;
+        }
+        
+        // Skip non-solid tiles
+        if (!collisionGrid.isSolid(checkX, checkY)) {
+          continue;
+        }
+        
+        // Calculate closest point on the tile to the player center
+        const tileLeft = checkX * tileSize;
+        const tileTop = checkY * tileSize;
+        const tileRight = tileLeft + tileSize;
+        const tileBottom = tileTop + tileSize;
+        
+        // Find closest point on rectangle to circle center
+        const closestX = Math.max(tileLeft, Math.min(newX, tileRight));
+        const closestY = Math.max(tileTop, Math.min(newY, tileBottom));
+        
+        // Calculate distance from closest point to circle center
+        const distX = newX - closestX;
+        const distY = newY - closestY;
+        const distanceSquared = distX * distX + distY * distY;
+        
+        // Collision if distance is less than radius
+        if (distanceSquared < radius * radius) {
+          return true;
+        }
+      }
+    }
+    
+    return false;
+  }
+
+  takeDamage(amount, attacker) {
+    if (this.isDead) return;
+    
+    // Handle damage and death logic...
+  }
+
+  die() {
+    if (this.isDead) return;
+    
+    this.isDead = true;
+    this.inputBuffer = []; // Clear input buffer on death
+    
+    // Start respawn timer
+    this.respawnTimer = setTimeout(() => {
+      this.respawn();
+    }, config.RESPAWN_TIME);
+  }
+
+  respawn() {
+    this.isDead = false;
+    this.inputBuffer = []; // Clear input buffer on respawn
+    
+    if (this.respawnTimer) {
+      clearTimeout(this.respawnTimer);
+      this.respawnTimer = null;
+    }
+  }
+
+  teleport(x, y, mapId) {
+    this.x = x;
+    this.y = y;
+    this.currentMapId = mapId;
+    this.inputBuffer = []; // Clear input buffer on teleport
+  }
+
+  // Get serialized data for client updates
+  getUpdateData() {
+    return {
+      id: this.id,
+      x: this.x,
+      y: this.y,
+      isDead: this.isDead,
+      name: this.name,
+      lastProcessedInput: this.lastProcessedInput // Add sequence number
+    };
+  }
+
+  // Get serialized data for initial client state
+  getFullData() {
+    return {
+      id: this.id,
+      x: this.x,
+      y: this.y,
+      radius: this.radius,
+      color: this.color,
+      isDead: this.isDead,
+      name: this.name,
+      lastProcessedInput: this.lastProcessedInput
+    };
+  }
+
+  cleanup() {
+    if (this.respawnTimer) {
+      clearTimeout(this.respawnTimer);
+      this.respawnTimer = null;
     }
   }
 
@@ -406,4 +391,4 @@ class Player {
   }
 }
 
-module.exports = { Player };
+module.exports = Player;

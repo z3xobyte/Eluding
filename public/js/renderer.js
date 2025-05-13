@@ -337,100 +337,87 @@ export class Renderer {
   }
 
   renderPlayers(players, camera) {
-    if (!players || players.size === 0) return;
-
-    this.updateSpatialGrid(players, "players");
-
-    const visiblePlayers = this.getVisibleEntities("players", camera);
-    if (visiblePlayers.size === 0) return;
-
-    const colorGroups = new Map();
+    const ctx = this.ctx;
     const currentPlayer = this.getCurrentPlayer(players);
 
-    for (const [, player] of visiblePlayers) {
-      if (!player) continue;
+    ctx.save();
+    ctx.lineWidth = 2;
 
-      const screenPos = camera.worldToScreen(player.x, player.y);
-
-      const color = player.color || "white";
-      if (!colorGroups.has(color)) {
-        colorGroups.set(color, []);
-      }
-      colorGroups.get(color).push({
-        x: screenPos.x,
-        y: screenPos.y,
-        radius: player.radius,
-        isDead: player.isDead,
-        name: player.name, // Store name for rendering
-      });
-    }
-
-    for (const [color, playersToDraw] of colorGroups) {
-      this.ctx.fillStyle = color;
-      this.ctx.beginPath();
-      for (const p of playersToDraw) {
-        this.ctx.moveTo(p.x + p.radius, p.y);
-        this.ctx.arc(p.x, p.y, p.radius, 0, Math.PI * 2);
-      }
-      this.ctx.fill();
+    // Render all players
+    players.forEach((player) => {
+      if (player.isDead) return; // Skip rendering dead players
       
-      // Add gray outline for all players
-      this.ctx.strokeStyle = "#bdbdbd";
-      this.ctx.lineWidth = 2;
-      this.ctx.beginPath();
-      for (const p of playersToDraw) {
-        this.ctx.moveTo(p.x + p.radius, p.y);
-        this.ctx.arc(p.x, p.y, p.radius, 0, Math.PI * 2);
+      // Use renderX/renderY when available (for smoother interpolation)
+      const playerX = player.renderX !== undefined ? player.renderX : player.x;
+      const playerY = player.renderY !== undefined ? player.renderY : player.y;
+
+      const screenPos = camera.worldToScreen(playerX, playerY);
+
+      // Calculate if player is on screen
+      const radius = player.radius || 25;
+      if (
+        screenPos.x + radius < 0 ||
+        screenPos.x - radius > camera.width ||
+        screenPos.y + radius < 0 ||
+        screenPos.y - radius > camera.height
+      ) {
+        return; // Skip rendering off-screen players
       }
-      this.ctx.stroke();
-    }
 
-    this.ctx.strokeStyle = "#800000";
-    this.ctx.lineWidth = 2;
-    let hasDeadPlayerStrokes = false;
-    this.ctx.beginPath();
+      // Draw player
+      ctx.beginPath();
+      ctx.arc(
+        screenPos.x,
+        screenPos.y,
+        radius,
+        0,
+        Math.PI * 2
+      );
 
-    for (const [, playersToDraw] of colorGroups) {
-      for (const p of playersToDraw) {
-        if (p.isDead) {
-          this.ctx.moveTo(p.x + p.radius, p.y);
-          this.ctx.arc(p.x, p.y, p.radius, 0, Math.PI * 2);
-          hasDeadPlayerStrokes = true;
-        }
-
+      // Determine colors and visual effects
+      const isCurrentPlayer = currentPlayer && player.id === currentPlayer.id;
+      const fillColor = player.color || "#FFFFFF";
+      const strokeColor = isCurrentPlayer ? "#FFEA00" : "#000000";
+      const shadowColor = isCurrentPlayer ? "#FFFF00" : "#444444";
+      
+      // Apply glow effect to current player
+      if (isCurrentPlayer) {
+        ctx.shadowColor = shadowColor;
+        ctx.shadowBlur = 10;
       }
-    }
-    if (hasDeadPlayerStrokes) {
-      this.ctx.stroke();
-    }
-    this.ctx.lineWidth = 1;
 
-    // Render player names
-    this.ctx.textAlign = "center";
-    this.ctx.font = 'bold 16px "Baloo Paaji 2", Arial, Helvetica, sans-serif';
-    this.ctx.textBaseline = "bottom";
-    this.ctx.lineWidth = 2;
+      ctx.fillStyle = fillColor;
+      ctx.strokeStyle = strokeColor;
+      ctx.fill();
+      ctx.stroke();
+      
+      // Reset shadow for other elements
+      ctx.shadowBlur = 0;
 
-    for (const [, playersToDraw] of colorGroups) {
-      for (const p of playersToDraw) {
-        if (p.name) {
-          const textX = p.x;
-          const textY = p.y - p.radius - 5;
-
-          // Draw text outline
-          this.ctx.strokeStyle = "#bdbdbd";
-          this.ctx.strokeText(p.name, textX, textY);
-
-          // Main text
-          this.ctx.fillStyle = "#FFFFFF";
-          this.ctx.fillText(p.name, textX, textY);
-        }
+      // Draw player name
+      if (player.name) {
+        ctx.font = "14px 'Baloo Paaji 2', sans-serif";
+        ctx.textAlign = "center";
+        ctx.textBaseline = "middle";
+        ctx.fillStyle = "#FFFFFF";
+        
+        // Text shadow for better readability
+        ctx.shadowColor = "#000000";
+        ctx.shadowBlur = 4;
+        ctx.shadowOffsetX = 1;
+        ctx.shadowOffsetY = 1;
+        
+        // Position name above player
+        ctx.fillText(player.name, screenPos.x, screenPos.y - radius - 10);
+        
+        // Reset shadow
+        ctx.shadowBlur = 0;
+        ctx.shadowOffsetX = 0;
+        ctx.shadowOffsetY = 0;
       }
-    }
+    });
 
-    if (currentPlayer && !currentPlayer.isDead) {
-      this.renderDirectionArrows(players, currentPlayer, camera);
-    }
+    ctx.restore();
   }
 
   getCurrentPlayer(players) {
